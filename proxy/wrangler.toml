@@ -1,0 +1,6 @@
+name = "cs2collector-steam-proxy"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+
+# PROXY_SECRET nustatomas kaip slaptas kintamasis:
+#   npx wrangler secret put PROXY_SECRET
