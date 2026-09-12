@@ -1,0 +1,70 @@
+export type RawItem = {
+  h: string; // market_hash_name
+  n: string; // rodomas pavadinimas
+  p: number; // kaina centais (EUR)
+  l: number; // parduodamu skelbimu kiekis
+  i: string | null; // Steam icon_url
+  t: string; // tipas, pvz. "Covert Rifle"
+  c: string; // retumo spalva HEX be #
+};
+
+export type PriceSnapshot = {
+  updated: string;
+  currency: string;
+  total: number;
+  count: number;
+  items: RawItem[];
+};
+
+export type Rarity = {
+  key: string;
+  label: string;
+  color: string;
+};
+
+export type Category =
+  | "ginklas"
+  | "peilis"
+  | "pirstines"
+  | "deze"
+  | "lipdukas"
+  | "agentas"
+  | "raktas"
+  | "grafitis"
+  | "talismanas"
+  | "kita";
+
+export type Item = RawItem & {
+  icon: string | null;
+  rarity: Rarity;
+  category: Category;
+  wear: string | null;
+  statTrak: boolean;
+  souvenir: boolean;
+  eur: number;
+};
+
+export type InventoryItem = {
+  hash: string;
+  name: string;
+  icon: string | null;
+  count: number;
+  unitEur: number | null;
+  totalEur: number | null;
+  rarity: Rarity;
+  category: Category;
+  wear: string | null;
+  statTrak: boolean;
+  tradable: boolean;
+};
+
+export type InventoryResult = {
+  steamId: string;
+  profile: { name: string | null; avatar: string | null } | null;
+  items: InventoryItem[];
+  totalEur: number;
+  pricedCount: number;
+  unpricedCount: number;
+  itemCount: number;
+  updated: string;
+};

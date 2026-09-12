@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #07090c;
+  --color-ink-900: #0b0e13;
+  --color-ink-850: #11151c;
+  --color-ink-800: #161b24;
+  --color-ink-700: #1e2530;
+  --color-ink-600: #2b3441;
+  --color-ink-400: #6b7688;
+  --color-ink-300: #94a0b2;
+  --color-ink-200: #c3ccd9;
+
+  --color-brand-400: #ffc24d;
+  --color-brand-500: #f5a524;
+  --color-brand-600: #d98407;
+
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(1100px 600px at 15% -10%, rgba(245, 165, 36, 0.09), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(75, 105, 255, 0.08), transparent 55%),
+    var(--color-ink-950);
+  color: var(--color-ink-200);
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--color-brand-500);
+  color: #000;
+}
+
+/* Plonos slinkties juostos */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.rise {
+  animation: rise 0.4s ease-out both;
+}

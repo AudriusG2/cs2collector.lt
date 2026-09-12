@@ -1,0 +1,42 @@
+name: Kasdienis kainų atnaujinimas
+
+on:
+  schedule:
+    - cron: "20 3 * * *" # kasdien 03:20 UTC
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "Kiek puslapių surinkti (1 psl. = 10 prekių)"
+        required: false
+        default: "400"
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Surinkti kainas
+        run: node scripts/scrape-prices.mjs --pages ${{ inputs.pages || '400' }}
+        env:
+          SCRAPE_DELAY: "3000"
+
+      - name: Įrašyti pokyčius
+        run: |
+          git config user.name "cs2collector-bot"
+          git config user.email "bot@cs2collector.lt"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Pokyčių nėra"
+          else
+            git commit -m "data: kainos $(date -u +%Y-%m-%d)"
+            git push
+          fi
