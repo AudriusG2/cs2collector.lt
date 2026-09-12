@@ -30,6 +30,7 @@ const NAV = [
   { href: "/kainos", label: "Kainos" },
   { href: "/inventorius", label: "Inventoriaus vertė" },
   { href: "/apie", label: "Apie" },
+  { href: "/mano", label: "Mano kolekcija" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -10,7 +10,7 @@
  * Apsaugos:
  *   - be teisingo PROXY_SECRET grazinama 404 (kad nepavirstu atviru proxy);
  *   - leidziami tik Steam domenai;
- *   - leidziamas tik GET.
+ *   - leidziamas GET; POST — tik Steam OpenID patikrai (/openid/login).
  */
 
 const ALLOWED_HOSTS = new Set([
@@ -41,7 +41,7 @@ const deny = (status, message) =>
 
 export default {
   async fetch(request, env) {
-    if (request.method !== "GET") return deny(405, "Leidziamas tik GET");
+    if (request.method !== "GET" && request.method !== "POST") return deny(405, "Neleidziamas metodas");
 
     const secret = env.PROXY_SECRET;
     if (!secret) return deny(500, "PROXY_SECRET nenustatytas");
@@ -63,6 +63,12 @@ export default {
     const target = new URL(`https://${host}/${parts.join("/")}`);
     target.search = url.search;
 
+    // POST leidziamas vieninteliam tikslui — OpenID parasu patikrai
+    const isPost = request.method === "POST";
+    if (isPost && !(host === "steamcommunity.com" && target.pathname === "/openid/login")) {
+      return deny(405, "POST leidziamas tik /openid/login");
+    }
+
     const headers = new Headers({
       "User-Agent": request.headers.get("user-agent") || DEFAULT_UA,
       Accept: request.headers.get("accept") || "application/json, text/plain, */*",
@@ -78,8 +84,10 @@ export default {
 
     let upstream;
     try {
+      if (isPost) headers.set("Content-Type", "application/x-www-form-urlencoded");
       upstream = await fetch(target.toString(), {
-        method: "GET",
+        method: request.method,
+        body: isPost ? await request.text() : undefined,
         headers,
         redirect: "follow",
         cf: { cacheTtl: 0, cacheEverything: false },

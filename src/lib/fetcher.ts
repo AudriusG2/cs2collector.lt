@@ -36,9 +36,11 @@ export function proxyUrl(url: string): string {
 }
 
 type FetchOpts = {
+  method?: "GET" | "POST";
+  body?: string;
   headers?: Record<string, string>;
   timeoutMs?: number;
-  /** Sekundes, kiek Next gali kesuoti atsakyma (netaikoma su HTTP proxy) */
+  /** Sekundes, kiek Next gali kesuoti atsakyma (netaikoma su HTTP proxy ir POST) */
   revalidate?: number;
 };
 
@@ -48,12 +50,14 @@ type FetchOpts = {
  * negalioja — tokiu atveju kesuoja pats marsrutas per `revalidate`.
  */
 export async function steamFetch(url: string, opts: FetchOpts = {}): Promise<Response> {
-  const { headers, timeoutMs = 25_000, revalidate } = opts;
+  const { method = "GET", body, headers, timeoutMs = 25_000, revalidate } = opts;
   const signal = AbortSignal.timeout(timeoutMs);
   const dispatcher = proxyAgent();
 
   if (dispatcher) {
     return fetch(proxyUrl(url), {
+      method,
+      body,
       headers,
       signal,
       // @ts-expect-error dispatcher yra undici plėtinys, kurio nėra DOM tipuose
@@ -62,9 +66,12 @@ export async function steamFetch(url: string, opts: FetchOpts = {}): Promise<Res
     });
   }
 
+  const cacheable = method === "GET" && revalidate != null;
   return fetch(proxyUrl(url), {
+    method,
+    body,
     headers,
     signal,
-    ...(revalidate != null ? { next: { revalidate } } : {}),
+    ...(cacheable ? { next: { revalidate } } : { cache: "no-store" as const }),
   });
 }
