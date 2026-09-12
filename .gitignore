@@ -43,3 +43,5 @@ next-env.d.ts
 # duomenys laikomi git-e, bet ne laikini failai
 .env
 .env.local
+
+.vercel

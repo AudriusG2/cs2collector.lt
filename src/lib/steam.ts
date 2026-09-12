@@ -1,18 +1,10 @@
+import { steamFetch } from "./fetcher";
 import { categorise, iconUrl, rarityFromColor, wearFromName } from "./items";
 import { loadPrices } from "./prices";
 import type { InventoryItem, InventoryResult } from "./types";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-
-/**
- * Neprivalomas proxy. Steam grieztai riboja uzklausas is vieno IP, o debesu
- * tiekeju adresai daznai blokuojami visai. Nustacius STEAM_PROXY_URL visos
- * uzklausos eina per ji: https://proxy.pvz/steamcommunity.com/...
- */
-const PROXY = process.env.STEAM_PROXY_URL?.replace(/\/$/, "");
-
-const viaProxy = (url: string) => (PROXY ? `${PROXY}/${url.replace(/^https?:\/\//, "")}` : url);
 
 const HEADERS = {
   "User-Agent": UA,
@@ -55,11 +47,9 @@ async function resolveVanity(vanity: string): Promise<string> {
   const key = process.env.STEAM_API_KEY;
 
   if (key) {
-    const res = await fetch(
-      viaProxy(
-        `https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key=${key}&vanityurl=${encodeURIComponent(vanity)}`,
-      ),
-      { headers: HEADERS, signal: AbortSignal.timeout(12_000), next: { revalidate: 86_400 } },
+    const res = await steamFetch(
+      `https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key=${key}&vanityurl=${encodeURIComponent(vanity)}`,
+      { headers: HEADERS, timeoutMs: 12_000, revalidate: 86_400 },
     ).catch(() => null);
     const json = (await res?.json().catch(() => null)) as
       | { response?: { success?: number; steamid?: string } }
@@ -69,10 +59,10 @@ async function resolveVanity(vanity: string): Promise<string> {
   }
 
   // Atsarginis variantas be API rakto: profilio XML isklotine
-  const res = await fetch(viaProxy(`https://steamcommunity.com/id/${encodeURIComponent(vanity)}?xml=1`), {
+  const res = await steamFetch(`https://steamcommunity.com/id/${encodeURIComponent(vanity)}?xml=1`, {
     headers: HEADERS,
-    signal: AbortSignal.timeout(12_000),
-    next: { revalidate: 86_400 },
+    timeoutMs: 12_000,
+    revalidate: 86_400,
   }).catch(() => null);
   const xml = (await res?.text().catch(() => "")) ?? "";
   const m = xml.match(/<steamID64>(\d+)<\/steamID64>/);
@@ -82,10 +72,10 @@ async function resolveVanity(vanity: string): Promise<string> {
 
 export async function getProfile(steamId: string) {
   try {
-    const res = await fetch(viaProxy(`https://steamcommunity.com/profiles/${steamId}?xml=1`), {
+    const res = await steamFetch(`https://steamcommunity.com/profiles/${steamId}?xml=1`, {
       headers: HEADERS,
-      signal: AbortSignal.timeout(10_000),
-      next: { revalidate: 86_400 },
+      timeoutMs: 10_000,
+      revalidate: 86_400,
     });
     const xml = await res.text();
     const name = xml.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/)?.[1] ?? null;
@@ -194,11 +184,7 @@ function fromLegacy(json: LegacyInventory): NormalisedEntry[] | null {
 }
 
 async function get(url: string) {
-  return fetch(viaProxy(url), {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(25_000),
-    next: { revalidate: 900 },
-  });
+  return steamFetch(url, { headers: HEADERS, timeoutMs: 25_000, revalidate: 900 });
 }
 
 /**
