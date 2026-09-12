@@ -15,7 +15,7 @@ type Params = Promise<{ hash: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { hash } = await params;
   const db = await loadPrices();
-  const item = db.byHash.get(decodeURIComponent(hash));
+  const item = findItem(db, hash)?.item;
   if (!item) return { title: "Prekė nerasta" };
   return {
     title: `${item.n} — kaina ${formatEur(item.eur)}`,
@@ -25,15 +25,46 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export async function generateStaticParams() {
   const db = await loadPrices();
+  // Kodavimas butinas: pavadinimuose yra "|", kuris negalimas failu varduose.
+  // Del to kelias gali ateiti uzkoduotas dukart — tuo pasirupina findItem().
   return db.items.slice(0, 150).map((i) => ({ hash: encodeURIComponent(i.h) }));
+}
+
+/**
+ * Kelio segmentas gali ateiti neuzkoduotas, uzkoduotas arba (priklausomai nuo
+ * aplinkos) uzkoduotas dukart, todel dekoduojam kol pavyksta ir tikrinam kiekviena
+ * tarpini variantą.
+ */
+function candidates(raw: string): string[] {
+  const out = [raw];
+  let cur = raw;
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      const next = decodeURIComponent(cur);
+      if (next === cur) break;
+      out.push(next);
+      cur = next;
+    } catch {
+      break;
+    }
+  }
+  return out;
+}
+
+function findItem(db: Awaited<ReturnType<typeof loadPrices>>, raw: string) {
+  for (const c of candidates(raw)) {
+    const hit = db.byHash.get(c);
+    if (hit) return { item: hit, hash: c };
+  }
+  return null;
 }
 
 export default async function SkinPage({ params }: { params: Params }) {
   const { hash: rawHash } = await params;
-  const hash = decodeURIComponent(rawHash);
   const db = await loadPrices();
-  const item = db.byHash.get(hash);
-  if (!item) notFound();
+  const found = findItem(db, rawHash);
+  if (!found) notFound();
+  const { item, hash } = found;
 
   const history = await loadHistory(hash);
   const similar = db.items
