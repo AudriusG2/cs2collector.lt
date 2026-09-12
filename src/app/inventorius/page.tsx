@@ -21,6 +21,10 @@ const FAQ = [
     a: "Tai orientacinė Steam Market vertė. Realiai parduodant Steam nuskaičiuoja apie 15% mokesčių, o trečiųjų šalių svetainėse kainos skiriasi.",
   },
   {
+    q: "Kodėl neįskaičiuoti Storage Unit daiktai?",
+    a: "Steam viešai neatiduoda saugyklų — nei jų turinio, nei pačių konteinerių. Tai matyti tik prisijungus prie tavo paskyros, tad nei ši, nei bet kuri kita svetainė to parodyti negali. Norėdamas įtraukti, žaidime išimk daiktus į inventorių.",
+  },
+  {
     q: "Ar saugote mano duomenis?",
     a: "Ne. Prisijungti nereikia, o inventoriaus užklausa atliekama tiesiogiai per viešą Steam API.",
   },

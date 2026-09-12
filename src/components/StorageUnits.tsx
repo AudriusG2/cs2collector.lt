@@ -2,11 +2,23 @@ import { formatNum } from "@/lib/format";
 import type { StorageUnit } from "@/lib/types";
 
 /**
- * Steam viesai neatiduoda Storage Unit turinio — matomas tik daiktu kiekis.
- * Todel apie juos praneseme atskirai, kad bendra suma neatrodytu klaidingai maza.
+ * Steam vieso inventoriaus API Storage Unit visai negrazina — nei turinio, nei
+ * paties konteinerio (patikrinta 2026-09-12 su realiu inventoriumi). Todel:
+ *
+ *  - kai saugyklu neaptinkam (iprastas atvejis), rodom trumpa paaiskinima,
+ *    kad suma gali buti didesne — kitaip zmogus nesupras, kur dingo daiktai;
+ *  - jei Steam kada nors pradetu juos atiduoti, isplestas blokas suveiks pats.
  */
 export function StorageUnits({ units, storedCount }: { units: StorageUnit[]; storedCount: number }) {
-  if (!units.length) return null;
+  if (!units.length) {
+    return (
+      <p className="rounded-lg border border-ink-700 bg-ink-850/50 px-4 py-3 text-xs leading-relaxed text-ink-400">
+        <b className="text-ink-300">Laikai daiktus Storage Unit saugykloje?</b> Jie į šią sumą
+        neįskaičiuoti — Steam saugyklų viešai neatiduoda, tad jų turinio nemato nei ši, nei bet kuri
+        kita svetainė. Norėdamas įtraukti, žaidime išimk daiktus į inventorių ir perkrauk puslapį.
+      </p>
+    );
+  }
 
   return (
     <section className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-5">
@@ -19,8 +31,7 @@ export function StorageUnits({ units, storedCount }: { units: StorageUnit[]; sto
             Saugyklose paslėpta {formatNum(storedCount)} daiktų — jie neįskaičiuoti
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-ink-300">
-            Steam viešai neatiduoda Storage Unit turinio — matomas tik daiktų kiekis. Ką tiksliai
-            laikai viduje, mato tik pats Steam, prisijungęs prie tavo paskyros. Tikroji inventoriaus
+            Steam neatiduoda Storage Unit turinio — matomas tik daiktų kiekis. Tikroji inventoriaus
             vertė todėl yra <b className="text-amber-300">didesnė</b> nei rodoma aukščiau.
           </p>
 
@@ -40,7 +51,7 @@ export function StorageUnits({ units, storedCount }: { units: StorageUnit[]; sto
           </ul>
 
           <p className="mt-3 text-xs leading-relaxed text-ink-400">
-            Nori pamatyti ir juos? Žaidime išimk daiktus iš saugyklos į inventorių ir perkrauk šį
+            Nori įtraukti ir juos? Žaidime išimk daiktus iš saugyklos į inventorių ir perkrauk šį
             puslapį. Slaptažodžio niekada neprašome ir prisijungimo nereikalaujame.
           </p>
         </div>

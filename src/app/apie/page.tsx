@@ -46,6 +46,15 @@ export default async function ApiePage() {
         </p>
       </Section>
 
+      <Section title="Ko į sumą neįeina">
+        <p>
+          <b className="text-ink-200">Storage Unit saugyklos.</b> Steam viešas inventoriaus API jų
+          negrąžina visai — nei turinio, nei pačių konteinerių. Tai matoma tik prisijungus prie
+          paskyros savininko sesija, tad jokia trečiųjų šalių svetainė to parodyti negali. Jei
+          laikai daiktus saugykloje, tikroji vertė yra didesnė nei rodoma.
+        </p>
+      </Section>
+
       <Section title="Ką reiškia skaičius">
         <p>
           Tai <b className="text-ink-200">Steam Market vertė</b>, o ne suma, kurią gautum į banko
