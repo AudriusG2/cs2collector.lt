@@ -1,7 +1,7 @@
 import { steamFetch } from "./fetcher";
 import { categorise, iconUrl, rarityFromColor, wearFromName } from "./items";
 import { loadPrices } from "./prices";
-import type { InventoryItem, InventoryResult } from "./types";
+import type { InventoryItem, InventoryResult, StorageUnit } from "./types";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -99,6 +99,8 @@ type NormalisedEntry = {
   color: string;
   tradable: boolean;
   count: number;
+  /** Kiek daiktu paslepta viduje (tik Storage Unit atveju) */
+  storedCount: number;
 };
 
 /** Naujasis /inventory/<id>/730/2 formatas */
@@ -113,6 +115,7 @@ type ModernInventory = {
     type: string;
     name_color?: string;
     tradable: number;
+    descriptions?: { value?: string }[];
   }[];
 };
 
@@ -130,9 +133,31 @@ type LegacyInventory = {
       type: string;
       name_color?: string;
       tradable: number;
+      descriptions?: { value?: string }[];
     }
   >;
 };
+
+/**
+ * Storage Unit turinio Steam viesai neatiduoda — matomas tik daiktu kiekis
+ * aprasymo eiluteje „Number of Items: 245". Ta skaiciu ir istraukiam, kad
+ * galetume perspeti, jog i verte jie neiskaiciuoti.
+ */
+function storedCountOf(desc: { type?: string; descriptions?: { value?: string }[] }): number {
+  if (!/storage unit|casket/i.test(desc.type ?? "")) {
+    const lines = desc.descriptions ?? [];
+    const hasCount = lines.some((l) => /number of items/i.test(l.value ?? ""));
+    if (!hasCount) return 0;
+  }
+  for (const line of desc.descriptions ?? []) {
+    const m = (line.value ?? "").match(/number of items:\s*([\d.,\s]+)/i);
+    if (m) {
+      const n = Number(m[1].replace(/[^\d]/g, ""));
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return 0;
+}
 
 function fromModern(json: ModernInventory): NormalisedEntry[] | null {
   if (!json.assets?.length || !json.descriptions?.length) return null;
@@ -143,8 +168,10 @@ function fromModern(json: ModernInventory): NormalisedEntry[] | null {
     if (!d?.market_hash_name) continue;
     const amount = Number(a.amount) || 1;
     const cur = out.get(d.market_hash_name);
-    if (cur) cur.count += amount;
-    else
+    if (cur) {
+      cur.count += amount;
+      cur.storedCount += storedCountOf(d);
+    } else {
       out.set(d.market_hash_name, {
         hash: d.market_hash_name,
         name: d.name,
@@ -153,7 +180,9 @@ function fromModern(json: ModernInventory): NormalisedEntry[] | null {
         color: d.name_color ?? "",
         tradable: d.tradable === 1,
         count: amount,
+        storedCount: storedCountOf(d),
       });
+    }
   }
   return out.size ? [...out.values()] : null;
 }
@@ -168,8 +197,10 @@ function fromLegacy(json: LegacyInventory): NormalisedEntry[] | null {
     if (!d?.market_hash_name) continue;
     const amount = Number(a.amount) || 1;
     const cur = out.get(d.market_hash_name);
-    if (cur) cur.count += amount;
-    else
+    if (cur) {
+      cur.count += amount;
+      cur.storedCount += storedCountOf(d);
+    } else {
       out.set(d.market_hash_name, {
         hash: d.market_hash_name,
         name: d.name,
@@ -178,7 +209,9 @@ function fromLegacy(json: LegacyInventory): NormalisedEntry[] | null {
         color: d.name_color ?? "",
         tradable: d.tradable === 1,
         count: amount,
+        storedCount: storedCountOf(d),
       });
+    }
   }
   return out.size ? [...out.values()] : null;
 }
@@ -249,12 +282,24 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
   ]);
 
   const items: InventoryItem[] = [];
+  const storageUnits: StorageUnit[] = [];
   let totalEur = 0;
   let pricedCount = 0;
   let unpricedCount = 0;
   let itemCount = 0;
+  let storedItemCount = 0;
 
   for (const e of entries) {
+    if (e.storedCount > 0) {
+      storageUnits.push({
+        hash: e.hash,
+        name: e.name,
+        icon: iconUrl(e.icon),
+        storedCount: e.storedCount,
+      });
+      storedItemCount += e.storedCount;
+    }
+
     const price = db.byHash.get(e.hash);
     const unitEur = price ? price.eur : null;
     const totalItemEur = unitEur != null ? unitEur * e.count : null;
@@ -292,6 +337,8 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
     pricedCount,
     unpricedCount,
     itemCount,
+    storageUnits: storageUnits.sort((a, b) => b.storedCount - a.storedCount),
+    storedItemCount,
     updated: db.updated,
   };
 }

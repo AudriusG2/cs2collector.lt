@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Stat } from "@/components/Stat";
+import { StorageUnits } from "@/components/StorageUnits";
 import { SteamForm } from "@/components/SteamForm";
 import { formatEur, formatNum, timeAgo } from "@/lib/format";
 import { CATEGORY_LABELS, wearShort } from "@/lib/items";
@@ -90,7 +91,15 @@ export default async function InventoryResultPage({ params }: { params: Params }
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Stat label="Bendra vertė" value={formatEur(total)} accent hint="Steam Market kainomis" />
-        <Stat label="Daiktų" value={formatNum(result.itemCount)} hint="iš viso inventoriuje" />
+        <Stat
+          label="Daiktų"
+          value={formatNum(result.itemCount)}
+          hint={
+            result.storedItemCount > 0
+              ? `+ ${formatNum(result.storedItemCount)} saugyklose`
+              : "iš viso inventoriuje"
+          }
+        />
         <Stat label="Įkainota" value={formatNum(result.pricedCount)} hint="rasta mūsų bazėje" />
         <Stat
           label="Vidutinė kaina"
@@ -98,6 +107,8 @@ export default async function InventoryResultPage({ params }: { params: Params }
           hint="už įkainotą daiktą"
         />
       </div>
+
+      <StorageUnits units={result.storageUnits} storedCount={result.storedItemCount} />
 
       {categories.length > 0 && (
         <section>

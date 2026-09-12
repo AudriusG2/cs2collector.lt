@@ -58,6 +58,14 @@ export type InventoryItem = {
   tradable: boolean;
 };
 
+/** Storage Unit (saugyklos konteineris) — Steam viesai neatiduoda jo turinio */
+export type StorageUnit = {
+  hash: string;
+  name: string;
+  icon: string | null;
+  storedCount: number;
+};
+
 export type InventoryResult = {
   steamId: string;
   profile: { name: string | null; avatar: string | null } | null;
@@ -66,5 +74,8 @@ export type InventoryResult = {
   pricedCount: number;
   unpricedCount: number;
   itemCount: number;
+  /** Saugyklos ir jose paslepti daiktai — i verte neiskaiciuojami */
+  storageUnits: StorageUnit[];
+  storedItemCount: number;
   updated: string;
 };
