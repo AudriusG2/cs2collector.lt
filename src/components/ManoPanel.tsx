@@ -161,8 +161,16 @@ export function ManoPanel({ steamId, inventoryEur }: { steamId: string; inventor
             <h2 className="text-lg font-bold text-white">Storage Unit saugyklos</h2>
             <p className="mt-1 max-w-xl text-sm leading-relaxed text-ink-400">
               Steam saugyklų turinio viešai neatiduoda. Nuskaityk jį savo kompiuteryje su{" "}
-              <b className="text-ink-300">cs2collector eksporto įrankiu</b> — prisijungimas vyksta ten, ne
-              mūsų serveryje — ir įkelk gautą <code className="text-ink-300">.json</code> failą čia.
+              <a
+                href="https://github.com/AudriusG2/cs2collector.lt/tree/main/tools/storage-export"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-brand-400 underline hover:text-brand-300"
+              >
+                cs2collector eksporto programa
+              </a>{" "}
+              — prisijungimas vyksta QR kodu tavo telefone, be slaptažodžio — ir įkelk gautą{" "}
+              <code className="text-ink-300">.json</code> failą čia.
             </p>
           </div>
           <label
