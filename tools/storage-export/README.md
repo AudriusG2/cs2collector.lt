@@ -1,16 +1,27 @@
-# cs2collector.lt — Storage Unit eksportas
+# cs2collector.lt — saugyklų programa
 
-Steam viešai neatiduoda CS2 saugyklų (Storage Unit) turinio, todėl jokia svetainė jo
-nemato. Ši programa veikia **tavo kompiuteryje**, nuskaito saugyklas ir sukuria `.json`
-failą, kurį įkeli puslapyje [cs2collector.lt/mano](https://cs2collector.lt/mano).
+Steam neleidžia svetainėms matyti, kas yra tavo CS2 **Storage Unit** saugyklose. Ši nedidelė
+programa nuskaito jas **tavo kompiuteryje** ir pati atidaro
+[cs2collector.lt/mano](https://cs2collector.lt/mano), kur saugyklos įsikelia automatiškai.
+
+## Kaip naudotis
+
+1. **Paleisk programą** (žr. „Paleidimas“ žemiau).
+2. **Nuskenuok QR kodą** telefone: Steam programėlė → **Steam Guard** → QR skeneris → patvirtink.
+   Kodas galioja 5 minutes.
+3. **Palauk apie minutę** — programa perskaitys saugyklas ir atidarys svetainę.
+   Saugyklų vertė atsiras puslapyje „Mano kolekcija“.
+
+Nieko ieškoti ar įkelti nereikia. Jei naršyklė neatsidarė, programa šalia išsaugo failą
+`cs2collector-saugyklos-….json` — jį galima įkelti rankiniu būdu puslapio apačioje.
 
 ## Saugumas
 
-- **Slaptažodžio vesti nereikia.** Prisijungiama QR kodu per Steam telefono programėlę.
-- **Tik skaitymas.** Programa daiktų neperkelia, neparduoda ir nekeičia.
-- **Niekas nesiunčiama į cs2collector.lt.** Parsisiunčiamas tik viešas daiktų žemėlapis;
-  failą į svetainę įkeli pats.
-- Kodas atviras — jį galima perskaityti: `src/index.js`.
+- **Slaptažodžio vesti nereikia** — prisijungiama QR kodu per Steam telefono programėlę.
+- **Tik skaitymas** — daiktai neperkeliami, neparduodami ir nekeičiami.
+- **Duomenys nekeliauja per mūsų serverį.** Saugyklų sąrašas perduodamas adreso dalyje po `#`,
+  kurios naršyklė į serverį nesiunčia; svetainė jį išsaugo tik tavo naršyklėje.
+- Kodas atviras: `src/index.js`, `src/resolve.js`.
 
 ## Paleidimas
 
@@ -21,14 +32,9 @@ npm install
 npm start
 ```
 
-1. Terminale atsiras QR kodas.
-2. Telefone: **Steam → Steam Guard → nuskenuoti QR** ir patvirtinti.
-3. Palauk, kol nuskaitys saugyklas.
-4. Šalia atsiras failas `cs2collector-saugyklos-YYYY-MM-DD.json` — įkelk jį svetainėje.
-
 ## Pastabos
 
-- Kol programa veikia, Steam draugams gali rodyti, kad žaidi CS2 — tai būtina, norint
-  prisijungti prie žaidimo koordinatoriaus. Baigus programa atsijungia pati.
+- Kol programa veikia, Steam draugams gali rodyti, kad žaidi CS2 — to reikia prisijungti prie
+  žaidimo koordinatoriaus. Baigus programa atsijungia pati.
 - Jei tuo metu žaidi CS2 kitame kompiuteryje, žaidimas gali būti atjungtas.
 - Retas daiktas gali likti neatpažintas — programa parodo, kiek tokių buvo.

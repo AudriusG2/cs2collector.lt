@@ -12,7 +12,27 @@
 import { writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { spawn } from "node:child_process";
+import { deflateRawSync } from "node:zlib";
 import { DEF_STORAGE_UNIT, resolveHash } from "./resolve.js";
+
+const SITE_URL = (process.env.CS2C_SITE_URL ?? "https://cs2collector.lt").replace(/\/$/, "");
+
+/** Atidaro adresa numatytoje narsykleje. Grazina false, jei nepavyko paleisti. */
+function openInBrowser(url) {
+  try {
+    const opts = { detached: true, stdio: "ignore" };
+    const child =
+      process.platform === "win32"
+        ? spawn("cmd", ["/c", "start", "", url], { ...opts, windowsVerbatimArguments: false })
+        : spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], opts);
+    child.on("error", () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const require = createRequire(import.meta.url);
 const SteamUser = require("steam-user");
@@ -157,8 +177,19 @@ async function main() {
     const n = [...unresolved.values()].reduce((a, b) => a + b, 0);
     log(`Neatpažinta: ${n} daiktų (${[...unresolved.keys()].slice(0, 5).join("; ")}${unresolved.size > 5 ? "…" : ""})`);
   }
-  log(`\nFailas: ${file}`);
-  log("Įkelk jį svetainėje: https://cs2collector.lt/mano\n");
+  log(`\nAtsarginė kopija: ${file}`);
+
+  // Duomenys perduodami adreso dalyje po „#" — narsykle jos i serveri nesiuncia,
+  // todel saugyklu sarasas pasiekia tik vartotojo narsykle, ne musu serveri.
+  const slim = JSON.stringify({ v: 1, units: units.map((u) => ({ name: u.name, items: u.items.map((i) => [i.hash, i.count]) })) });
+  const payload = deflateRawSync(Buffer.from(slim), { level: 9 }).toString("base64url");
+  const url = `${SITE_URL}/mano#saugyklos=${payload}`;
+  if (openInBrowser(url)) {
+    log("Atidaroma cs2collector.lt/mano — saugyklos įsikels automatiškai.");
+  } else {
+    log("Naršyklės atidaryti nepavyko. Atsidaryk cs2collector.lt/mano ir įkelk atsarginę kopiją mygtuku „Įkelti failą\".");
+  }
+  log("");
 
   client.logOff();
   setTimeout(() => process.exit(0), 500);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PriceChart } from "@/components/PriceChart";
 import { formatEur, formatNum } from "@/lib/format";
 
@@ -29,8 +29,11 @@ type StorageState = {
 
 type HistoryPoint = { date: string; eur: number };
 
+type ImportUnit = { name?: string; items?: { hash?: string; count?: number }[] };
+
 const histKey = (id: string) => `cs2c:hist:${id}`;
 const storageKey = (id: string) => `cs2c:storage:${id}`;
+const HASH_PREFIX = "#saugyklos=";
 
 /* localStorage gali buti neprieinamas (privatus langas, blokuoti slapukai) */
 function readJson<T>(key: string): T | null {
@@ -50,9 +53,29 @@ function writeJson(key: string, value: unknown) {
 }
 
 type ExportFile = {
-  units?: { name?: string; items?: { hash?: string; count?: number }[] }[];
+  units?: ImportUnit[];
   items?: { hash?: string; count?: number }[];
 };
+
+/**
+ * Programa perduoda saugyklas adreso dalyje po „#saugyklos=" (suspausta deflate-raw,
+ * base64url). Narsykle sios dalies i serveri nesiuncia — duomenys lieka tik cia.
+ */
+async function decodeHashPayload(payload: string): Promise<ImportUnit[]> {
+  const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const json = JSON.parse(await new Response(stream).text()) as {
+    v?: number;
+    units?: { name?: string; items?: [string, number][] }[];
+  };
+  if (!Array.isArray(json.units)) throw new Error("Neatpažinti saugyklų duomenys.");
+  return json.units.map((u) => ({
+    name: u.name,
+    items: (u.items ?? []).map(([hash, count]) => ({ hash, count })),
+  }));
+}
 
 export function ManoPanel({
   steamId,
@@ -68,45 +91,14 @@ export function ManoPanel({
   const [storage, setStorage] = useState<StorageState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // Ikeliam issaugota bukle ir irasom siandienos verte i istorija
-  useEffect(() => {
-    const saved = readJson<StorageState>(storageKey(steamId));
-    setStorage(saved);
-
-    const hist = readJson<HistoryPoint[]>(histKey(steamId)) ?? [];
-    if (inventoryEur != null) {
-      const today = new Date().toISOString().slice(0, 10);
-      const total = Math.round((inventoryEur + (saved?.totalEur ?? 0)) * 100) / 100;
-      const next = [...hist.filter((p) => p.date !== today), { date: today, eur: total }]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-365);
-      writeJson(histKey(steamId), next);
-      setHistory(next);
-    } else {
-      setHistory(hist);
-    }
-  }, [steamId, inventoryEur]);
-
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const parsed = JSON.parse(await file.text()) as ExportFile;
-      const units = parsed.units?.length
-        ? parsed.units
-        : parsed.items
-          ? [{ name: "Saugykla", items: parsed.items }]
-          : null;
-      if (!units) throw new Error("Failas neatpažintas — tikėtasi cs2collector eksporto.");
-
+  const importUnits = useCallback(
+    async (units: ImportUnit[]) => {
       const lines = units.flatMap((u) =>
         (u.items ?? []).map((it) => ({ hash: String(it.hash ?? ""), count: Number(it.count) || 1 })),
       );
-      if (!lines.length) throw new Error("Faile nėra daiktų.");
+      if (!lines.length) throw new Error("Saugyklose nerasta daiktų.");
 
       const res = await fetch("/api/ikainoti", {
         method: "POST",
@@ -131,6 +123,75 @@ export function ManoPanel({
       };
       writeJson(storageKey(steamId), state);
       setStorage(state);
+      return state;
+    },
+    [steamId],
+  );
+
+  // Ikeliam issaugota bukle ir irasom siandienos verte i istorija
+  useEffect(() => {
+    const saved = readJson<StorageState>(storageKey(steamId));
+    setStorage(saved);
+
+    const hist = readJson<HistoryPoint[]>(histKey(steamId)) ?? [];
+    if (inventoryEur != null) {
+      const today = new Date().toISOString().slice(0, 10);
+      const total = Math.round((inventoryEur + (saved?.totalEur ?? 0)) * 100) / 100;
+      const next = [...hist.filter((p) => p.date !== today), { date: today, eur: total }]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-365);
+      writeJson(histKey(steamId), next);
+      setHistory(next);
+    } else {
+      setHistory(hist);
+    }
+  }, [steamId, inventoryEur]);
+
+  // Automatinis ikelimas, kai programa atidaro puslapi su #saugyklos=
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.startsWith(HASH_PREFIX)) return;
+    // Is karto isvalom adresa, kad duomenys neliktu narsykles istorijoje ar nuorodose
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+    let cancelled = false;
+    (async () => {
+      setError(null);
+      setBusy(true);
+      try {
+        const units = await decodeHashPayload(hash.slice(HASH_PREFIX.length));
+        const state = await importUnits(units);
+        if (!cancelled) {
+          const count = state.units.reduce((s, u) => s + u.count, 0);
+          setNotice(`Saugyklos įkeltos: ${state.units.length} saugyklos, ${formatNum(count)} daiktų.`);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Nepavyko įkelti saugyklų.");
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [importUnits]);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      const parsed = JSON.parse(await file.text()) as ExportFile;
+      const units = parsed.units?.length
+        ? parsed.units
+        : parsed.items
+          ? [{ name: "Saugykla", items: parsed.items }]
+          : null;
+      if (!units) throw new Error("Failas neatpažintas — tikėtasi cs2collector saugyklų failo.");
+      await importUnits(units);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nepavyko nuskaityti failo.");
     } finally {
@@ -145,6 +206,7 @@ export function ManoPanel({
       /* nieko */
     }
     setStorage(null);
+    setNotice(null);
   }
 
   const grand = (inventoryEur ?? 0) + (storage?.totalEur ?? 0);
@@ -179,32 +241,59 @@ export function ManoPanel({
       </section>
 
       <section className="rounded-xl border border-ink-700 bg-ink-850/60 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-white">Storage Unit saugyklos</h2>
-            <p className="mt-1 max-w-xl text-sm leading-relaxed text-ink-400">
-              Steam saugyklų turinio viešai neatiduoda. Nuskaityk jį savo kompiuteryje su{" "}
-              <a
-                href="https://github.com/AudriusG2/cs2collector.lt/tree/main/tools/storage-export"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-brand-400 underline hover:text-brand-300"
-              >
-                cs2collector eksporto programa
-              </a>{" "}
-              — prisijungimas vyksta QR kodu tavo telefone, be slaptažodžio — ir įkelk gautą{" "}
-              <code className="text-ink-300">.json</code> failą čia.
-            </p>
-          </div>
-          <label
-            className={`cursor-pointer rounded-xl bg-gradient-to-b from-brand-400 to-brand-600 px-5 py-2.5 text-sm font-semibold text-ink-950 transition-all hover:brightness-110 ${busy ? "pointer-events-none opacity-50" : ""}`}
-          >
-            {busy ? "Skaičiuoju…" : storage ? "Įkelti iš naujo" : "Įkelti failą"}
-            <input type="file" accept="application/json,.json" onChange={onFile} className="sr-only" />
-          </label>
-        </div>
+        <h2 className="text-lg font-bold text-white">Storage Unit saugyklos</h2>
+        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-400">
+          Steam neleidžia svetainėms matyti, kas yra tavo saugyklose. Todėl jas nuskaito nedidelė
+          programa tavo kompiuteryje — tai užtrunka apie minutę.
+        </p>
 
-        {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+        {busy && <p className="mt-4 text-sm text-brand-400">Įkeliamos saugyklos…</p>}
+        {notice && !busy && (
+          <p className="mt-4 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-300">
+            ✓ {notice}
+          </p>
+        )}
+        {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
+
+        {!storage && !busy && (
+          <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                t: "Paleisk programą",
+                d: (
+                  <>
+                    Kompiuteryje paleisk{" "}
+                    <a
+                      href="https://github.com/AudriusG2/cs2collector.lt/tree/main/tools/storage-export#readme"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-brand-400 underline hover:text-brand-300"
+                    >
+                      cs2collector saugyklų programą
+                    </a>
+                    .
+                  </>
+                ),
+              },
+              {
+                t: "Nuskenuok QR kodą",
+                d: "Telefone: Steam programėlė → Steam Guard → QR skeneris. Slaptažodžio vesti nereikia.",
+              },
+              {
+                t: "Palauk",
+                d: "Programa pati atidarys šį puslapį, ir saugyklos įsikels automatiškai.",
+              },
+            ].map((s, i) => (
+              <li key={s.t} className="rounded-lg border border-ink-700 bg-ink-900/50 p-3">
+                <span className="grid size-7 place-items-center rounded-md bg-brand-600/15 text-xs font-bold text-brand-400">
+                  {i + 1}
+                </span>
+                <p className="mt-2 text-sm font-semibold text-white">{s.t}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-400">{s.d}</p>
+              </li>
+            ))}
+          </ol>
+        )}
 
         {storage && (
           <div className="mt-5 flex flex-col gap-4">
@@ -255,6 +344,24 @@ export function ManoPanel({
             </div>
           </div>
         )}
+
+        <details className="mt-4 text-xs text-ink-400">
+          <summary className="cursor-pointer select-none hover:text-ink-200">
+            Programa neatidarė puslapio? Įkelk rankiniu būdu
+          </summary>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <span>
+              Programa taip pat išsaugo failą <code className="text-ink-300">cs2collector-saugyklos-….json</code> ten,
+              kur ji paleista.
+            </span>
+            <label
+              className={`cursor-pointer rounded-lg border border-ink-600 px-3 py-1.5 font-semibold text-ink-200 transition-colors hover:border-brand-600 hover:text-brand-400 ${busy ? "pointer-events-none opacity-50" : ""}`}
+            >
+              {storage ? "Įkelti failą iš naujo" : "Pasirinkti failą"}
+              <input type="file" accept="application/json,.json" onChange={onFile} className="sr-only" />
+            </label>
+          </div>
+        </details>
       </section>
     </div>
   );
