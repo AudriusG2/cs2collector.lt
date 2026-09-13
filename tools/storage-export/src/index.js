@@ -19,6 +19,7 @@ const SteamUser = require("steam-user");
 const GlobalOffensive = require("globaloffensive");
 const { LoginSession, EAuthTokenPlatformType } = require("steam-session");
 const qrcode = require("qrcode-terminal");
+const QRCode = require("qrcode");
 
 const MAP_URL = process.env.CS2C_MAP_URL ?? "https://cs2collector.lt/item-map.json";
 const CS2_APP_ID = 730;
@@ -40,6 +41,11 @@ async function loginWithQr() {
 
   log("\nAtidaryk Steam programėlę telefone → Steam Guard → nuskenuok šį QR kodą:\n");
   qrcode.generate(start.qrChallengeUrl, { small: true });
+
+  // Tas pats kodas paveikslelyje — patogu, kai terminalo simboliai atvaizduojami netiksliai
+  const qrFile = path.resolve("qr.png");
+  await QRCode.toFile(qrFile, start.qrChallengeUrl, { width: 480, margin: 2 });
+  log(`QR paveikslėlis: ${qrFile}`);
   log("\n(Kodas galioja kelias minutes. Slaptažodžio vesti nereikia.)\n");
 
   return new Promise((resolve, reject) => {
