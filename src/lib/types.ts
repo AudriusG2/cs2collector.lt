@@ -56,6 +56,8 @@ export type InventoryItem = {
   wear: string | null;
   statTrak: boolean;
   tradable: boolean;
+  /** Ar Steam leidzia prekiauti Market'e (medaliai, monetos, C4 — ne) */
+  marketable: boolean;
 };
 
 /** Storage Unit (saugyklos konteineris) — Steam viesai neatiduoda jo turinio */

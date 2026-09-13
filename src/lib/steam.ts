@@ -98,6 +98,7 @@ type NormalisedEntry = {
   type: string;
   color: string;
   tradable: boolean;
+  marketable: boolean;
   count: number;
   /** Kiek daiktu paslepta viduje (tik Storage Unit atveju) */
   storedCount: number;
@@ -115,6 +116,7 @@ type ModernInventory = {
     type: string;
     name_color?: string;
     tradable: number;
+    marketable?: number;
     descriptions?: { value?: string }[];
   }[];
 };
@@ -133,6 +135,7 @@ type LegacyInventory = {
       type: string;
       name_color?: string;
       tradable: number;
+      marketable?: number;
       descriptions?: { value?: string }[];
     }
   >;
@@ -179,6 +182,7 @@ function fromModern(json: ModernInventory): NormalisedEntry[] | null {
         type: d.type,
         color: d.name_color ?? "",
         tradable: d.tradable === 1,
+        marketable: d.marketable === 1,
         count: amount,
         storedCount: storedCountOf(d),
       });
@@ -208,6 +212,7 @@ function fromLegacy(json: LegacyInventory): NormalisedEntry[] | null {
         type: d.type,
         color: d.name_color ?? "",
         tradable: d.tradable === 1,
+        marketable: d.marketable === 1,
         count: amount,
         storedCount: storedCountOf(d),
       });
@@ -324,6 +329,7 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
       wear: wearFromName(e.hash),
       statTrak: e.hash.includes("StatTrak"),
       tradable: e.tradable,
+      marketable: e.marketable,
     });
   }
 

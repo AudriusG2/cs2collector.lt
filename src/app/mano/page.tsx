@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { InventoryBreakdown } from "@/components/InventoryBreakdown";
 import { ManoPanel } from "@/components/ManoPanel";
 import { Stat } from "@/components/Stat";
 import { formatEur, formatNum, timeAgo } from "@/lib/format";
@@ -120,6 +121,8 @@ export default async function ManoPage({ searchParams }: { searchParams: SP }) {
       )}
 
       <ManoPanel steamId={steamId} inventoryEur={result?.totalEur ?? null} />
+
+      {result && <InventoryBreakdown items={result.items} totalEur={result.totalEur} />}
     </div>
   );
 }
