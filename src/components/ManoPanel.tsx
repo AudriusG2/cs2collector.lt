@@ -12,6 +12,8 @@ type Priced = {
   count: number;
   unitEur: number | null;
   totalEur: number | null;
+  buffUnitEur?: number | null;
+  buffTotalEur?: number | null;
 };
 
 type StorageState = {
@@ -19,6 +21,8 @@ type StorageState = {
   units: { name: string; count: number; totalEur: number }[];
   items: Priced[];
   totalEur: number;
+  /** Nera senuose (iki Buff) issaugotuose importuose */
+  buffTotalEur?: number;
   pricedCount: number;
   unpricedCount: number;
 };
@@ -154,9 +158,14 @@ export function ManoPanel({
           Inventorius {formatEur(inventoryEur ?? 0)}
           {" + "}saugyklos {storage ? formatEur(storage.totalEur) : "neįkeltos"} · Steam kainomis
         </p>
-        {inventoryBuffEur != null && (
+        {(inventoryBuffEur != null || storage?.buffTotalEur != null) && (
           <p className="mt-0.5 text-sm text-ink-400">
-            Inventorius Buff kainomis: <b className="text-brand-400">{formatEur(inventoryBuffEur)}</b>
+            Buff kainomis:{" "}
+            <b className="text-brand-400">
+              {formatEur((inventoryBuffEur ?? 0) + (storage?.buffTotalEur ?? 0))}
+            </b>{" "}
+            (inventorius {formatEur(inventoryBuffEur ?? 0)}
+            {storage?.buffTotalEur != null ? ` + saugyklos ${formatEur(storage.buffTotalEur)}` : ""})
           </p>
         )}
       </section>

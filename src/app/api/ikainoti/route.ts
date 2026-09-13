@@ -1,4 +1,4 @@
-import { loadPrices } from "@/lib/prices";
+import { loadBuff, loadPrices } from "@/lib/prices";
 
 const MAX_ITEMS = 5000;
 
@@ -21,22 +21,36 @@ export async function POST(request: Request) {
     merged.set(it.hash, (merged.get(it.hash) ?? 0) + count);
   }
 
-  const db = await loadPrices();
+  const [db, buff] = await Promise.all([loadPrices(), loadBuff()]);
   let totalEur = 0;
   let pricedCount = 0;
   let unpricedCount = 0;
+  let buffTotalEur = 0;
 
   const items = [...merged].map(([hash, count]) => {
     const p = db.byHash.get(hash);
     const unitEur = p ? p.eur : null;
     const lineEur = unitEur != null ? unitEur * count : null;
-    if (lineEur != null) {
-      totalEur += lineEur;
-      pricedCount += count;
-    } else unpricedCount += count;
-    return { hash, name: p?.n ?? hash, icon: p?.icon ?? null, color: p?.rarity.color ?? null, count, unitEur, totalEur: lineEur };
+    const b = buff.byHash.get(hash);
+    const buffUnitEur = b ? b.eur : null;
+    const buffLineEur = buffUnitEur != null ? buffUnitEur * count : null;
+    if (lineEur != null) totalEur += lineEur;
+    if (buffLineEur != null) buffTotalEur += buffLineEur;
+    if (lineEur != null || buffLineEur != null) pricedCount += count;
+    else unpricedCount += count;
+    return {
+      hash,
+      name: p?.n ?? hash,
+      icon: p?.icon ?? null,
+      color: p?.rarity.color ?? null,
+      count,
+      unitEur,
+      totalEur: lineEur,
+      buffUnitEur,
+      buffTotalEur: buffLineEur,
+    };
   });
 
-  items.sort((a, b) => (b.totalEur ?? -1) - (a.totalEur ?? -1));
-  return Response.json({ items, totalEur, pricedCount, unpricedCount, updated: db.updated });
+  items.sort((a, b) => Math.max(b.buffTotalEur ?? -1, b.totalEur ?? -1) - Math.max(a.buffTotalEur ?? -1, a.totalEur ?? -1));
+  return Response.json({ items, totalEur, buffTotalEur, pricedCount, unpricedCount, updated: db.updated, buffUpdated: buff.updated });
 }
