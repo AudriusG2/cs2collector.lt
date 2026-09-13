@@ -72,6 +72,7 @@ function publicView(s) {
     steamId: s.steamId ?? undefined,
     units: s.units ?? undefined,
     unresolvedCount: s.unresolvedCount || undefined,
+    unresolvedSamples: s.unresolvedSamples || undefined,
     error: s.error ?? undefined,
   };
 }
@@ -124,6 +125,7 @@ async function readCaskets(refreshToken, session) {
   const caskets = (csgo.inventory || []).filter((i) => i.def_index === DEF_STORAGE_UNIT);
   const units = [];
   let unresolved = 0;
+  const unresolvedSamples = []; // neatpazintu daiktu atributai vertimo klaidoms taisyti (be paskyros duomenu)
 
   for (const [idx, c] of caskets.entries()) {
     const items = await new Promise((resolve, reject) => {
@@ -139,6 +141,18 @@ async function readCaskets(refreshToken, session) {
       const hash = resolveHash(it, map);
       if (!hash) {
         unresolved += 1;
+        if (unresolvedSamples.length < 15) {
+          unresolvedSamples.push({
+            def_index: it.def_index,
+            paint_index: it.paint_index ?? null,
+            keychains: it.keychains ?? null,
+            stickers: it.stickers ?? null,
+            attributes: (it.attribute || []).map((a) => ({
+              def_index: a.def_index,
+              uint32: a.value_bytes?.length >= 4 ? a.value_bytes.readUInt32LE(0) : null,
+            })),
+          });
+        }
         continue;
       }
       counts.set(hash, (counts.get(hash) ?? 0) + 1);
@@ -151,7 +165,7 @@ async function readCaskets(refreshToken, session) {
 
   client.logOff();
   session.client = null;
-  return { units, unresolved };
+  return { units, unresolved, unresolvedSamples };
 }
 
 async function startSession(session) {
@@ -172,9 +186,10 @@ async function startSession(session) {
     session.login = null;
     session.state = "reading";
     try {
-      const { units, unresolved } = await readCaskets(refreshToken, session);
+      const { units, unresolved, unresolvedSamples } = await readCaskets(refreshToken, session);
       session.units = units;
       session.unresolvedCount = unresolved;
+      session.unresolvedSamples = unresolvedSamples;
       session.state = "done";
     } catch (err) {
       session.state = "error";
