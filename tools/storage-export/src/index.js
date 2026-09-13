@@ -37,6 +37,9 @@ async function loadMap() {
 
 async function loginWithQr() {
   const session = new LoginSession(EAuthTokenPlatformType.SteamClient);
+  // steam-session numatytai laukia tik 30 s — per mazai, kad zmogus spetu nuskenuoti.
+  // Riba privalo buti nustatyta pries startWithQR (po polling pradzios keisti draudziama).
+  session.loginTimeout = 5 * 60 * 1000;
   const start = await session.startWithQR();
 
   log("\nAtidaryk Steam programėlę telefone → Steam Guard → nuskenuok šį QR kodą:\n");
@@ -102,6 +105,8 @@ async function main() {
 
   const units = [];
   const unresolved = new Map();
+  // Neatpazintu daiktu atributai — kad vertimo klaidas butu galima taisyti be pakartotinio prisijungimo
+  const unresolvedSamples = [];
 
   for (const [idx, c] of caskets.entries()) {
     const name = c.custom_name || `Storage Unit ${idx + 1}`;
@@ -114,6 +119,19 @@ async function main() {
       if (!hash) {
         const key = `def ${it.def_index}${it.paint_index != null ? ` / paint ${Math.round(it.paint_index)}` : ""}`;
         unresolved.set(key, (unresolved.get(key) ?? 0) + 1);
+        if (unresolvedSamples.length < 20) {
+          unresolvedSamples.push({
+            def_index: it.def_index,
+            paint_index: it.paint_index ?? null,
+            quality: it.quality ?? null,
+            stickers: it.stickers ?? null,
+            attributes: (it.attribute || []).map((a) => ({
+              def_index: a.def_index,
+              uint32: a.value_bytes?.length >= 4 ? a.value_bytes.readUInt32LE(0) : null,
+              float: a.value_bytes?.length >= 4 ? a.value_bytes.readFloatLE(0) : null,
+            })),
+          });
+        }
         continue;
       }
       counts.set(hash, (counts.get(hash) ?? 0) + 1);
@@ -127,6 +145,7 @@ async function main() {
     exportedAt: new Date().toISOString(),
     steamId,
     units,
+    ...(unresolvedSamples.length ? { unresolvedSamples } : {}),
   };
 
   const file = path.resolve(`cs2collector-saugyklos-${new Date().toISOString().slice(0, 10)}.json`);
