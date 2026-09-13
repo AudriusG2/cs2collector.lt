@@ -1,0 +1,29 @@
+# cs2collector.lt saugyklu serveris (Fly.io)
+app = "cs2collector-storage"
+primary_region = "fra"
+
+[build]
+
+[env]
+  PORT = "8787"
+  ALLOWED_ORIGINS = "https://cs2collector.lt,https://www.cs2collector.lt"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Servisas turi buti pasiekiamas is karto (QR sesija laikoma atmintyje),
+  # todel nesustabdom masinos automatiskai.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

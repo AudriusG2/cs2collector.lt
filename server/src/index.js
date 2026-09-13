@@ -25,6 +25,11 @@ const SteamUser = require("steam-user");
 const GlobalOffensive = require("globaloffensive");
 const { LoginSession, EAuthTokenPlatformType } = require("steam-session");
 
+// Steam bibliotekos gali mesti klaidas asinchroniskai (nutruksta rysys, netiketa bukle).
+// Serveris NIEKADA neturi del to nulūžti — viena sesija negali numusti viso proceso.
+process.on("uncaughtException", (err) => console.error("uncaughtException:", err?.message || err));
+process.on("unhandledRejection", (err) => console.error("unhandledRejection:", err?.message || err));
+
 const PORT = Number(process.env.PORT ?? 8787);
 const MAP_URL = process.env.CS2C_MAP_URL ?? "https://cs2collector.lt/item-map.json";
 const CS2_APP_ID = 730;

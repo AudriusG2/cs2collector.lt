@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PriceChart } from "@/components/PriceChart";
 import { formatEur, formatNum } from "@/lib/format";
 
-const STORAGE_URL = process.env.NEXT_PUBLIC_STORAGE_URL?.replace(/\/$/, "") || null;
+// Saugyklu serverio adresas — viesas (ne slaptas). Perrasomas per NEXT_PUBLIC_STORAGE_URL.
+const STORAGE_URL =
+  process.env.NEXT_PUBLIC_STORAGE_URL?.replace(/\/$/, "") || "https://cs2collector-storage.fly.dev";
 
 type Priced = {
   hash: string;
