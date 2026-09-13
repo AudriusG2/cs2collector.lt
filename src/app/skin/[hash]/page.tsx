@@ -5,7 +5,7 @@ import { PriceChart } from "@/components/PriceChart";
 import { Stat } from "@/components/Stat";
 import { formatEur, formatNum, timeAgo } from "@/lib/format";
 import { CATEGORY_LABELS, baseName, wearLabel } from "@/lib/items";
-import { loadHistory, loadPrices } from "@/lib/prices";
+import { loadBuff, loadHistory, loadPrices } from "@/lib/prices";
 
 export const revalidate = 3600;
 export const dynamicParams = true;
@@ -66,7 +66,8 @@ export default async function SkinPage({ params }: { params: Params }) {
   if (!found) notFound();
   const { item, hash } = found;
 
-  const history = await loadHistory(hash);
+  const [history, buff] = await Promise.all([loadHistory(hash), loadBuff()]);
+  const buffPrice = buff.byHash.get(hash) ?? null;
   const similar = db.items
     .filter((i) => i.h !== item.h && baseName(i.n) === baseName(item.n))
     .sort((a, b) => b.p - a.p)
@@ -133,8 +134,14 @@ export default async function SkinPage({ params }: { params: Params }) {
             <p className="mt-1 text-sm text-ink-400">{item.t}</p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Stat label="Kaina" value={formatEur(item.eur)} accent hint="pigiausias pasiūlymas" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Steam kaina" value={formatEur(item.eur)} hint="pigiausias Steam pasiūlymas" />
+            <Stat
+              label="Buff kaina"
+              value={buffPrice ? formatEur(buffPrice.eur) : "—"}
+              accent
+              hint={buffPrice ? `${formatNum(buffPrice.listings)} pasiūlymų Buff.market` : "Buff kainos nėra"}
+            />
             <Stat label="Parduodama" value={formatNum(item.l)} hint="aktyvių skelbimų" />
             <Stat label="Būklė" value={wearLabel(item.wear) ?? "—"} hint={item.wear ?? "netaikoma"} />
           </div>

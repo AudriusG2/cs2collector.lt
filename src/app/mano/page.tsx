@@ -112,15 +112,25 @@ export default async function ManoPage({ searchParams }: { searchParams: SP }) {
         </p>
       ) : (
         result && (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Stat label="Inventoriaus vertė" value={formatEur(result.totalEur)} accent hint="be saugyklų" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Steam vertė" value={formatEur(result.totalEur)} hint="inventorius, be saugyklų" />
+            <Stat
+              label="Buff vertė"
+              value={formatEur(result.buffTotalEur)}
+              accent
+              hint={result.buffUpdated ? "inventorius, be saugyklų" : "Buff kainos dar renkamos"}
+            />
             <Stat label="Daiktų" value={formatNum(result.itemCount)} hint="inventoriuje" />
             <Stat label="Įkainota" value={formatNum(result.pricedCount)} hint="rasta kainų bazėje" />
           </div>
         )
       )}
 
-      <ManoPanel steamId={steamId} inventoryEur={result?.totalEur ?? null} />
+      <ManoPanel
+        steamId={steamId}
+        inventoryEur={result?.totalEur ?? null}
+        inventoryBuffEur={result?.buffUpdated ? result.buffTotalEur : null}
+      />
 
       {result && <InventoryBreakdown items={result.items} totalEur={result.totalEur} />}
     </div>

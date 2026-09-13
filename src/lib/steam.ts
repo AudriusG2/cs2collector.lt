@@ -1,6 +1,6 @@
 import { steamFetch } from "./fetcher";
 import { categorise, iconUrl, rarityFromColor, wearFromName } from "./items";
-import { loadPrices } from "./prices";
+import { loadBuff, loadPrices } from "./prices";
 import type { InventoryItem, InventoryResult, StorageUnit } from "./types";
 
 const UA =
@@ -280,9 +280,10 @@ async function fetchEntries(steamId: string): Promise<NormalisedEntry[]> {
 }
 
 export async function getInventoryValue(steamId: string): Promise<InventoryResult> {
-  const [entries, db, profile] = await Promise.all([
+  const [entries, db, buff, profile] = await Promise.all([
     fetchEntries(steamId),
     loadPrices(),
+    loadBuff(),
     getProfile(steamId),
   ]);
 
@@ -293,6 +294,8 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
   let unpricedCount = 0;
   let itemCount = 0;
   let storedItemCount = 0;
+  let buffTotalEur = 0;
+  let buffPricedCount = 0;
 
   for (const e of entries) {
     if (e.storedCount > 0) {
@@ -308,6 +311,13 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
     const price = db.byHash.get(e.hash);
     const unitEur = price ? price.eur : null;
     const totalItemEur = unitEur != null ? unitEur * e.count : null;
+    const buffPrice = buff.byHash.get(e.hash);
+    const buffUnitEur = buffPrice ? buffPrice.eur : null;
+    const buffItemEur = buffUnitEur != null ? buffUnitEur * e.count : null;
+    if (buffItemEur != null) {
+      buffTotalEur += buffItemEur;
+      buffPricedCount += e.count;
+    }
 
     if (totalItemEur != null) {
       totalEur += totalItemEur;
@@ -324,6 +334,8 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
       count: e.count,
       unitEur,
       totalEur: totalItemEur,
+      buffUnitEur,
+      buffTotalEur: buffItemEur,
       rarity: rarityFromColor(e.color),
       category: categorise(e.type, e.hash),
       wear: wearFromName(e.hash),
@@ -346,5 +358,8 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
     storageUnits: storageUnits.sort((a, b) => b.storedCount - a.storedCount),
     storedItemCount,
     updated: db.updated,
+    buffTotalEur,
+    buffPricedCount,
+    buffUpdated: buff.updated,
   };
 }

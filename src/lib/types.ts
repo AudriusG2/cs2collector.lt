@@ -51,6 +51,9 @@ export type InventoryItem = {
   count: number;
   unitEur: number | null;
   totalEur: number | null;
+  /** Buff.market kaina eurais (pigiausias pasiulymas) */
+  buffUnitEur: number | null;
+  buffTotalEur: number | null;
   rarity: Rarity;
   category: Category;
   wear: string | null;
@@ -80,4 +83,8 @@ export type InventoryResult = {
   storageUnits: StorageUnit[];
   storedItemCount: number;
   updated: string;
+  /** Buff.market vertes suvestine (null, jei Buff duomenu dar nera) */
+  buffTotalEur: number;
+  buffPricedCount: number;
+  buffUpdated: string | null;
 };

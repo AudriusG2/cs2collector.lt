@@ -50,7 +50,16 @@ type ExportFile = {
   items?: { hash?: string; count?: number }[];
 };
 
-export function ManoPanel({ steamId, inventoryEur }: { steamId: string; inventoryEur: number | null }) {
+export function ManoPanel({
+  steamId,
+  inventoryEur,
+  inventoryBuffEur = null,
+}: {
+  steamId: string;
+  inventoryEur: number | null;
+  /** Inventoriaus verte Buff kainomis; null — Buff duomenu nera */
+  inventoryBuffEur?: number | null;
+}) {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [storage, setStorage] = useState<StorageState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -143,8 +152,13 @@ export function ManoPanel({ steamId, inventoryEur }: { steamId: string; inventor
         <p className="mt-1 text-4xl font-black tabular-nums text-white">{formatEur(grand)}</p>
         <p className="mt-1 text-sm text-ink-300">
           Inventorius {formatEur(inventoryEur ?? 0)}
-          {" + "}saugyklos {storage ? formatEur(storage.totalEur) : "neįkeltos"}
+          {" + "}saugyklos {storage ? formatEur(storage.totalEur) : "neįkeltos"} · Steam kainomis
         </p>
+        {inventoryBuffEur != null && (
+          <p className="mt-0.5 text-sm text-ink-400">
+            Inventorius Buff kainomis: <b className="text-brand-400">{formatEur(inventoryBuffEur)}</b>
+          </p>
+        )}
       </section>
 
       <section>

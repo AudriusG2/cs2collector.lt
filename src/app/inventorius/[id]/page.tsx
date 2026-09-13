@@ -80,7 +80,13 @@ export default async function InventoryResultPage({ params }: { params: Params }
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
-        <Stat label="Bendra vertė" value={formatEur(total)} accent hint="Steam Market kainomis" />
+        <Stat label="Steam vertė" value={formatEur(total)} hint="Steam Market kainomis" />
+        <Stat
+          label="Buff vertė"
+          value={formatEur(result.buffTotalEur)}
+          accent
+          hint={result.buffUpdated ? "Buff.market kainomis" : "Buff kainos dar renkamos"}
+        />
         <Stat
           label="Daiktų"
           value={formatNum(result.itemCount)}
@@ -91,11 +97,6 @@ export default async function InventoryResultPage({ params }: { params: Params }
           }
         />
         <Stat label="Įkainota" value={formatNum(result.pricedCount)} hint="rasta mūsų bazėje" />
-        <Stat
-          label="Vidutinė kaina"
-          value={formatEur(result.pricedCount ? total / result.pricedCount : 0)}
-          hint="už įkainotą daiktą"
-        />
       </div>
 
       <StorageUnits units={result.storageUnits} storedCount={result.storedItemCount} />

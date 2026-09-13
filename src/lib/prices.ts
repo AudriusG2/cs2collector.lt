@@ -89,3 +89,26 @@ export function searchItems(db: PriceDb, opts: SearchOpts) {
     totalPages,
   };
 }
+
+export type BuffDb = {
+  updated: string | null;
+  usdEur: number | null;
+  byHash: Map<string, { eur: number; listings: number }>;
+};
+
+/** Buff.market kainos (data/buff.json). Jei failo nera — tuscia baze, svetaine veikia toliau. */
+export const loadBuff = cache(async (): Promise<BuffDb> => {
+  try {
+    const raw = JSON.parse(await readFile(path.join(DATA_DIR, "buff.json"), "utf8")) as {
+      updated: string;
+      usdEur: number;
+      items: Record<string, [number, number]>;
+    };
+    const byHash = new Map(
+      Object.entries(raw.items).map(([hash, [cents, listings]]) => [hash, { eur: cents / 100, listings }]),
+    );
+    return { updated: raw.updated, usdEur: raw.usdEur, byHash };
+  } catch {
+    return { updated: null, usdEur: null, byHash: new Map() };
+  }
+});

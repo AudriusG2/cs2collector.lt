@@ -5,19 +5,25 @@ import type { InventoryItem } from "@/lib/types";
 
 const MAX_PRICED_ROWS = 150;
 
+const bestValue = (i: InventoryItem) => Math.max(i.buffTotalEur ?? -1, i.totalEur ?? -1);
+
 /**
- * Inventoriaus detalizacija: verte pagal kategorijas, daiktai su kaina ir
- * atskirai daiktai be kainos su priezastimi. Naudojama /inventorius ir /mano.
+ * Inventoriaus detalizacija: verte pagal kategorijas, daiktai su kaina (Steam ir
+ * Buff greta) ir atskirai daiktai be jokios kainos su priezastimi.
+ * Naudojama /inventorius ir /mano.
  */
 export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]; totalEur: number }) {
-  const priced = items.filter((i) => i.totalEur != null);
-  const unpriced = items.filter((i) => i.totalEur == null);
+  const priced = items
+    .filter((i) => i.totalEur != null || i.buffTotalEur != null)
+    .sort((a, b) => bestValue(b) - bestValue(a));
+  const unpriced = items.filter((i) => i.totalEur == null && i.buffTotalEur == null);
 
   const byCategory = new Map<string, number>();
   for (const it of priced) byCategory.set(it.category, (byCategory.get(it.category) ?? 0) + (it.totalEur ?? 0));
   const categories = [...byCategory.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
 
   const shown = priced.slice(0, MAX_PRICED_ROWS);
+  const buffTotal = priced.reduce((s, i) => s + (i.buffTotalEur ?? 0), 0);
   const unpricedTotal = unpriced.reduce((s, i) => s + i.count, 0);
   const notMarketable = unpriced.filter((i) => !i.marketable).reduce((s, i) => s + i.count, 0);
 
@@ -47,6 +53,7 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
               );
             })}
           </div>
+          <p className="mt-2 text-[11px] text-ink-400">Pagal Steam Market kainas.</p>
         </section>
       )}
 
@@ -55,40 +62,48 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <h2 className="text-lg font-bold text-white">Daiktai su kaina</h2>
             <span className="text-xs text-ink-400">
-              {formatNum(priced.reduce((s, i) => s + i.count, 0))} daiktų · {formatEur(totalEur)}
+              {formatNum(priced.reduce((s, i) => s + i.count, 0))} daiktų · Steam {formatEur(totalEur)} · Buff{" "}
+              {formatEur(buffTotal)}
             </span>
           </div>
           <div className="overflow-x-auto rounded-xl border border-ink-700">
-            <table className="w-full min-w-[520px] text-sm">
+            <table className="w-full min-w-[560px] text-sm">
               <thead className="bg-ink-850">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-ink-400">
                   <th className="px-4 py-3 font-semibold">Prekė</th>
                   <th className="px-4 py-3 text-right font-semibold">Kiekis</th>
-                  <th className="px-4 py-3 text-right font-semibold">Vnt.</th>
-                  <th className="px-4 py-3 text-right font-semibold">Viso</th>
+                  <th className="px-4 py-3 text-right font-semibold">Steam</th>
+                  <th className="px-4 py-3 text-right font-semibold">Buff</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-700/70">
                 {shown.map((it) => (
                   <tr key={it.hash} className="bg-ink-900/40 transition-colors hover:bg-ink-800/60">
                     <td className="px-4 py-2.5">
-                      <ItemCell item={it} linkToSkin />
+                      <ItemCell item={it} linkToSkin={it.totalEur != null} />
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-ink-400">{it.count}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-300">{formatEur(it.unitEur)}</td>
-                    <td className="px-4 py-2.5 text-right font-bold tabular-nums text-brand-400">
-                      {formatEur(it.totalEur)}
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      <PriceCell total={it.totalEur} unit={it.unitEur} count={it.count} className="text-ink-200" />
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      <PriceCell
+                        total={it.buffTotalEur}
+                        unit={it.buffUnitEur}
+                        count={it.count}
+                        className="font-bold text-brand-400"
+                      />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {priced.length > shown.length && (
-            <p className="mt-2 text-xs text-ink-400">
-              Rodoma {shown.length} brangiausių iš {formatNum(priced.length)} skirtingų prekių.
-            </p>
-          )}
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
+            Steam — pigiausias Steam Market pasiūlymas. Buff — pigiausias Buff.market pasiūlymas, perskaičiuotas į
+            eurus; paprastai artimesnis realiai prekiautojų kainai.
+            {priced.length > shown.length && ` Rodoma ${shown.length} brangiausių iš ${formatNum(priced.length)}.`}
+          </p>
         </section>
       )}
 
@@ -100,7 +115,7 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
               {formatNum(unpricedTotal)} daiktų į sumą neįskaičiuota.
               {notMarketable > 0 && ` ${formatNum(notMarketable)} iš jų Steam Market neparduodami (medaliai, monetos, C4 ir pan.).`}
               {unpricedTotal - notMarketable > 0 &&
-                ` ${formatNum(unpricedTotal - notMarketable)} parduodami, bet jų dar nėra mūsų kainų bazėje.`}
+                ` ${formatNum(unpricedTotal - notMarketable)} parduodami, bet jų kainos neturime nei iš Steam, nei iš Buff.`}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -133,6 +148,26 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
         </section>
       )}
     </div>
+  );
+}
+
+function PriceCell({
+  total,
+  unit,
+  count,
+  className,
+}: {
+  total: number | null;
+  unit: number | null;
+  count: number;
+  className: string;
+}) {
+  if (total == null) return <span className="text-ink-600">—</span>;
+  return (
+    <span className="inline-flex flex-col items-end">
+      <span className={className}>{formatEur(total)}</span>
+      {count > 1 && unit != null && <span className="text-[10px] text-ink-400">{formatEur(unit)}/vnt.</span>}
+    </span>
   );
 }
 
