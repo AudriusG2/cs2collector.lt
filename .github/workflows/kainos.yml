@@ -29,10 +29,6 @@ jobs:
         env:
           SCRAPE_DELAY: "3000"
 
-      - name: Surinkti Buff.market kainas
-        run: node scripts/scrape-buff.mjs
-        continue-on-error: true   # Buff nepasiekiamas — Steam kainos vis tiek įrašomos
-
       - name: Įrašyti pokyčius
         run: |
           git config user.name "cs2collector-bot"
@@ -42,5 +38,6 @@ jobs:
             echo "Pokyčių nėra"
           else
             git commit -m "data: kainos $(date -u +%Y-%m-%d)"
+            git pull --rebase --autostash
             git push
           fi

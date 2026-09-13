@@ -4,27 +4,49 @@
  * perskaiciuoja i eurus pagal ECB kursa. Buff kainos yra artimesnes realiai
  * prekiautoju rinkai nei Steam Market.
  *
+ * Buff grieztai riboja greiti: vietoj duomenu grazina „Login Required". Todel:
+ *  - rezultatas SUJUNGIAMAS su esamu data/buff.json — praleisti puslapiai
+ *    nenutrina anksciau surinktu kainu, kiekvienas paleidimas baze papildo;
+ *  - gavus ribojima laukiama ilgiau (COOLDOWN_MS), o ne kartojama is karto;
+ *  - daliniai rezultatai issaugomi kas 25 puslapius, kad nutrukus darbui
+ *    nieko neprarastume.
+ *
  * Rezultatas — data/buff.json:
- *   { updated, source, usdEur, count, items: { [market_hash_name]: [euroCentai, parduodamuKiekis] } }
+ *   { updated, source, usdEur, count, items: { [market_hash_name]: [euroCentai, parduodamuKiekis, atnaujintaYYYYMMDD] } }
  *
  * Naudojimas:
- *   node scripts/scrape-buff.mjs              # visas katalogas (~425 psl., ~10 min)
- *   node scripts/scrape-buff.mjs --pages 5    # greitas bandymas
+ *   node scripts/scrape-buff.mjs                 # visas katalogas
+ *   node scripts/scrape-buff.mjs --pages 5       # greitas bandymas
+ *   node scripts/scrape-buff.mjs --start 200     # tesiama nuo 200 puslapio
  */
-import { writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const OUT = path.join(ROOT, "data", "buff.json");
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
 const PAGE_SIZE = 80; // Buff daugiau neatiduoda
-const DELAY_MS = Number(process.env.BUFF_DELAY ?? 1200);
+const DELAY_MS = Number(process.env.BUFF_DELAY ?? 3500);
+const COOLDOWN_MS = Number(process.env.BUFF_COOLDOWN ?? 60_000);
+const MAX_ATTEMPTS = 4;
+
+const HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  Referer: "https://buff.market/market/csgo",
+  Origin: "https://buff.market",
+};
 
 const args = process.argv.slice(2);
-const pagesArg = args.indexOf("--pages");
-const maxPages = pagesArg !== -1 ? Number(args[pagesArg + 1]) : Infinity;
+const argNum = (name, fallback) => {
+  const i = args.indexOf(name);
+  return i !== -1 ? Number(args[i + 1]) : fallback;
+};
+const maxPages = argNum("--pages", Infinity);
+const startPage = argNum("--start", 1);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const today = () => Number(new Date().toISOString().slice(0, 10).replaceAll("-", ""));
 
 async function usdToEur() {
   const res = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR", {
@@ -36,71 +58,101 @@ async function usdToEur() {
   return rate;
 }
 
-async function fetchPage(page, attempt = 1) {
-  const url = `https://api.buff.market/api/market/goods?game=csgo&page_num=${page}&page_size=${PAGE_SIZE}`;
+async function loadExisting() {
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const j = await res.json();
-    if (j?.code !== "OK" || !j.data) throw new Error(`atsakymas: ${j?.code ?? "?"}`);
-    return j.data;
-  } catch (err) {
-    if (attempt >= 5) throw err;
-    const backoff = DELAY_MS * 2 ** attempt;
-    console.warn(`  ! psl. ${page}: ${err.message} — kartoju po ${Math.round(backoff / 1000)}s (${attempt}/5)`);
-    await sleep(backoff);
-    return fetchPage(page, attempt + 1);
+    const j = JSON.parse(await readFile(OUT, "utf8"));
+    return j?.items && typeof j.items === "object" ? j.items : {};
+  } catch {
+    return {};
   }
 }
 
-async function main() {
-  const usdEur = await usdToEur();
-  console.log(`USD→EUR: ${usdEur}`);
+class RateLimited extends Error {}
 
-  const items = {};
-  const skipped = [];
-  let page = 1;
-  let totalPages = 1;
+async function fetchPage(page) {
+  const url = `https://api.buff.market/api/market/goods?game=csgo&page_num=${page}&page_size=${PAGE_SIZE}`;
+  const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j = await res.json();
+  if (j?.code === "Login Required") throw new RateLimited("Buff riboja greitį");
+  if (j?.code !== "OK" || !j.data) throw new Error(`atsakymas: ${j?.code ?? "?"}`);
+  return j.data;
+}
 
-  while (page <= totalPages && page <= maxPages) {
-    let data;
+async function fetchWithRetry(page) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
-      data = await fetchPage(page);
+      return await fetchPage(page);
     } catch (err) {
-      // Vienas nepasiekiamas puslapis neturi sugadinti viso surinkimo
-      console.warn(`  × psl. ${page} praleistas: ${err.message}`);
-      skipped.push(page);
-      page += 1;
-      if (page <= totalPages && page <= maxPages) await sleep(DELAY_MS);
-      continue;
+      if (attempt === MAX_ATTEMPTS) throw err;
+      const wait = err instanceof RateLimited ? COOLDOWN_MS * attempt : DELAY_MS * 2 ** attempt;
+      console.warn(`  ! psl. ${page}: ${err.message} — laukiu ${Math.round(wait / 1000)}s (${attempt}/${MAX_ATTEMPTS})`);
+      await sleep(wait);
     }
-    totalPages = data.total_page ?? page;
-    for (const it of data.items ?? []) {
-      const usd = Number(it.sell_min_price);
-      if (!it.market_hash_name || !(usd > 0)) continue; // be pasiulymu — kainos nera
-      items[it.market_hash_name] = [Math.round(usd * usdEur * 100), Number(it.sell_num) || 0];
-    }
-    if (page % 25 === 0 || page === totalPages) {
-      console.log(`  psl. ${page}/${totalPages} — ${Object.keys(items).length} prekių su kaina`);
-    }
-    page += 1;
-    if (page <= totalPages && page <= maxPages) await sleep(DELAY_MS);
   }
+  throw new Error("nepasiekiama");
+}
 
-  const count = Object.keys(items).length;
-  if (count === 0) throw new Error("Negauta nė vienos kainos — failas neperrašomas");
-
+async function save(items, usdEur) {
   await mkdir(path.dirname(OUT), { recursive: true });
+  const count = Object.keys(items).length;
   await writeFile(
     OUT,
     JSON.stringify({ updated: new Date().toISOString(), source: "buff.market", usdEur, count, items }),
   );
-  console.log(`\nOK — ${count} Buff kainų išsaugota į ${OUT}`);
+  return count;
+}
+
+async function main() {
+  const usdEur = await usdToEur();
+  const items = await loadExisting();
+  const before = Object.keys(items).length;
+  console.log(`USD→EUR: ${usdEur} · esamų Buff kainų: ${before}`);
+
+  const skipped = [];
+  let fresh = 0;
+  let page = startPage;
+  let totalPages = startPage;
+  let fetched = 0;
+
+  while (page <= totalPages && fetched < maxPages) {
+    let data;
+    try {
+      data = await fetchWithRetry(page);
+    } catch (err) {
+      console.warn(`  × psl. ${page} praleistas: ${err.message}`);
+      skipped.push(page);
+      page += 1;
+      fetched += 1;
+      await sleep(DELAY_MS);
+      continue;
+    }
+
+    totalPages = data.total_page ?? page;
+    const stamp = today();
+    for (const it of data.items ?? []) {
+      const usd = Number(it.sell_min_price);
+      if (!it.market_hash_name || !(usd > 0)) continue; // be pasiulymu — kainos nera
+      items[it.market_hash_name] = [Math.round(usd * usdEur * 100), Number(it.sell_num) || 0, stamp];
+      fresh += 1;
+    }
+
+    fetched += 1;
+    if (page % 25 === 0 || page === totalPages) {
+      const count = await save(items, usdEur); // dalinis issaugojimas
+      console.log(`  psl. ${page}/${totalPages} — ${count} kainų bazėje (${fresh} atnaujinta šiame paleidime)`);
+    }
+    page += 1;
+    if (page <= totalPages && fetched < maxPages) await sleep(DELAY_MS);
+  }
+
+  if (fresh === 0 && before === 0) throw new Error("Negauta nė vienos kainos — failas nesukurtas");
+
+  const count = await save(items, usdEur);
+  console.log(`\nOK — ${count} Buff kainų bazėje (${fresh} atnaujinta, anksčiau buvo ${before}) → ${OUT}`);
   if (skipped.length) {
-    console.log(`Praleisti puslapiai (${skipped.length}): ${skipped.slice(0, 20).join(", ")}${skipped.length > 20 ? "…" : ""}`);
+    console.log(`Praleisti puslapiai (${skipped.length}): ${skipped.slice(0, 30).join(", ")}${skipped.length > 30 ? "…" : ""}`);
+    console.log(`Tęsti vėliau galima: node scripts/scrape-buff.mjs --start ${skipped[0]}`);
   }
 }
 
