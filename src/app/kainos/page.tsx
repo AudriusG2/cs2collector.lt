@@ -4,14 +4,14 @@ import { ItemCard } from "@/components/ItemCard";
 import { formatNum, timeAgo } from "@/lib/format";
 import { ALL_RARITIES, CATEGORY_LABELS } from "@/lib/items";
 import { loadPrices, searchItems } from "@/lib/prices";
+import { pageSeo } from "@/lib/seo";
 
 export const revalidate = 3600;
 
-export const metadata: Metadata = {
-  title: "CS2 skinų kainos",
-  description:
-    "Visos CS2 skinų, dėžių ir lipdukų kainos eurais. Ieškok pagal pavadinimą, filtruok pagal tipą, retumą ir kainą.",
-};
+const TITLE = "CS2 skinų kainos";
+const DESCRIPTION =
+  "CS2 skinų, dėžių ir lipdukų kainos eurais. Ieškok pagal pavadinimą, filtruok pagal tipą ir retumą, rikiuok pagal kainą.";
+const PER_PAGE = 48;
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
@@ -24,16 +24,44 @@ const SORTS = [
   { v: "name", l: "Pagal pavadinimą" },
 ] as const;
 
-export default async function KainosPage({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams;
-  const q = one(sp.q);
+/** Adreso parametrai — skaitomi vienoje vietoje, kad antraste (metadata) ir sarasas visada sutaptu. */
+function parseQuery(sp: Awaited<SP>) {
+  const rawSort = one(sp.rusiuoti);
+  const sort = SORTS.find((s) => s.v === rawSort)?.v ?? "popular";
+  const q = one(sp.q).trim();
   const category = one(sp.kategorija);
   const rarity = one(sp.retumas);
-  const sort = (one(sp.rusiuoti) || "popular") as "popular" | "price-asc" | "price-desc" | "name";
-  const page = Number(one(sp.p)) || 1;
+  return {
+    q,
+    category,
+    rarity,
+    sort,
+    page: Math.max(1, Math.trunc(Number(one(sp.p)) || 1)),
+    filtered: Boolean(q || category || rarity || sort !== "popular"),
+  };
+}
+
+export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
+  const { filtered, page: wanted } = parseQuery(await searchParams);
+  // Paieskos, filtru ir rikiavimo deriniu begale — i paieskos sistemu indeksa jie neina.
+  // Indeksuojami tik gryni katalogo puslapiai (/kainos, ?p=2, ?p=3 …), kiekvienas su savo adresu.
+  if (filtered) return { title: TITLE, description: DESCRIPTION, robots: { index: false, follow: true } };
 
   const db = await loadPrices();
-  const res = searchItems(db, { q, category, rarity, sort, page, perPage: 48 });
+  const page = Math.min(wanted, Math.max(1, Math.ceil(db.items.length / PER_PAGE)));
+  const title = page > 1 ? `${TITLE} — ${page} psl.` : TITLE;
+  return {
+    title,
+    description: DESCRIPTION,
+    ...pageSeo({ path: page > 1 ? `/kainos?p=${page}` : "/kainos", title, description: DESCRIPTION }),
+  };
+}
+
+export default async function KainosPage({ searchParams }: { searchParams: SP }) {
+  const { q, category, rarity, sort, page } = parseQuery(await searchParams);
+
+  const db = await loadPrices();
+  const res = searchItems(db, { q, category, rarity, sort, page, perPage: PER_PAGE });
 
   const qs = (patch: Record<string, string | number | undefined>) => {
     const p = new URLSearchParams();
@@ -54,17 +82,20 @@ export default async function KainosPage({ searchParams }: { searchParams: SP })
         </p>
       </div>
 
+      <h2 className="sr-only">Paieška ir filtrai</h2>
       <form method="get" action="/kainos" className="flex flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
             name="q"
             defaultValue={q}
             placeholder="Ieškok: AK-47, Karambit, Dreams & Nightmares…"
+            aria-label="Ieškoti prekių pagal pavadinimą"
             className="min-w-0 flex-1 rounded-xl border border-ink-700 bg-ink-850 px-4 py-3 text-sm text-ink-200 outline-none transition-colors placeholder:text-ink-400 focus:border-brand-600"
           />
           <select
             name="rusiuoti"
             defaultValue={sort}
+            aria-label="Rikiavimas"
             className="rounded-xl border border-ink-700 bg-ink-850 px-3 py-3 text-sm text-ink-200 outline-none focus:border-brand-600"
           >
             {SORTS.map((s) => (
@@ -106,6 +137,7 @@ export default async function KainosPage({ searchParams }: { searchParams: SP })
         ))}
       </div>
 
+      <h2 className="sr-only">Prekių sąrašas</h2>
       <p className="text-sm text-ink-400">
         Rasta <span className="font-semibold text-ink-200">{formatNum(res.count)}</span> prekių
       </p>
@@ -126,25 +158,29 @@ export default async function KainosPage({ searchParams }: { searchParams: SP })
       )}
 
       {res.totalPages > 1 && (
-        <nav className="flex items-center justify-center gap-2 pt-4">
+        <nav aria-label="Puslapiai" className="flex items-center justify-center gap-2 pt-4">
+          {/* Paprastos nuorodos, ne <Link>: narsykleje Next antraste (pavadinima, canonical) kesuoja
+              be adreso parametru, todel perejus per <Link> puslapis N liktu su 1 puslapio pavadinimu.
+              Filtru nuorodos lieka <Link> (greiciau): ju pavadinimas toks pat, o paieskos sistemos
+              kiekviena adresa krauna is naujo ir gauna teisinga antraste is serverio. */}
           {res.page > 1 && (
-            <Link
+            <a
               href={qs({ p: res.page - 1 })}
               className="rounded-lg border border-ink-700 px-4 py-2 text-sm text-ink-200 transition-colors hover:border-ink-600 hover:text-white"
             >
               ← Atgal
-            </Link>
+            </a>
           )}
           <span className="px-3 text-sm text-ink-400">
             {res.page} / {res.totalPages}
           </span>
           {res.page < res.totalPages && (
-            <Link
+            <a
               href={qs({ p: res.page + 1 })}
               className="rounded-lg border border-ink-700 px-4 py-2 text-sm text-ink-200 transition-colors hover:border-ink-600 hover:text-white"
             >
               Pirmyn →
-            </Link>
+            </a>
           )}
         </nav>
       )}

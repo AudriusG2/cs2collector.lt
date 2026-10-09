@@ -2,13 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { formatNum, timeAgo } from "@/lib/format";
 import { loadPrices } from "@/lib/prices";
+import { pageSeo } from "@/lib/seo";
 
 export const revalidate = 3600;
 
+const TITLE = "Apie projektą";
+const DESCRIPTION =
+  "Kas yra cs2collector.lt, iš kur imami duomenys ir kaip skaičiuojama CS2 inventoriaus vertė.";
+
 export const metadata: Metadata = {
-  title: "Apie projektą",
-  description:
-    "Kas yra cs2collector.lt, iš kur imami duomenys ir kaip skaičiuojama CS2 inventoriaus vertė.",
+  title: TITLE,
+  description: DESCRIPTION,
+  ...pageSeo({ path: "/apie", title: TITLE, description: DESCRIPTION }),
 };
 
 export default async function ApiePage() {

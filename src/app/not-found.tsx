@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Puslapis nerastas",
+  description: "Tokio puslapio nėra arba jis buvo perkeltas.",
+  robots: { index: false, follow: false },
+};
 
 export default function NotFound() {
   return (

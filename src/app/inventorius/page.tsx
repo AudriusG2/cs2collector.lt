@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import { SteamForm } from "@/components/SteamForm";
+import { pageSeo } from "@/lib/seo";
+
+const TITLE = "CS2 inventoriaus vertė";
+const DESCRIPTION =
+  "Apskaičiuok savo CS2 inventoriaus vertę eurais pagal realias Steam Market kainas. Nemokama, be registracijos.";
 
 export const metadata: Metadata = {
-  title: "CS2 inventoriaus vertė",
-  description:
-    "Apskaičiuok savo CS2 inventoriaus vertę eurais pagal realias Steam Market kainas. Nemokama, be registracijos.",
+  title: TITLE,
+  description: DESCRIPTION,
+  ...pageSeo({ path: "/inventorius", title: TITLE, description: DESCRIPTION }),
 };
 
 const FAQ = [

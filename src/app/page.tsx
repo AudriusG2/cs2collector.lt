@@ -1,10 +1,27 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ItemCard } from "@/components/ItemCard";
 import { SteamForm } from "@/components/SteamForm";
 import { formatNum, timeAgo } from "@/lib/format";
 import { loadPrices } from "@/lib/prices";
+import { SITE, SITE_NAME, jsonLdHtml, pageSeo } from "@/lib/seo";
 
 export const revalidate = 3600;
+
+export const metadata: Metadata = pageSeo({ path: "/" });
+
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: SITE_NAME,
+  url: SITE,
+  inLanguage: "lt",
+  potentialAction: {
+    "@type": "SearchAction",
+    target: `${SITE}/kainos?q={search_term_string}`,
+    "query-input": "required name=search_term_string",
+  },
+};
 
 const STEPS = [
   { n: "1", t: "Įklijuok profilį", d: "Steam profilio nuoroda, vanity vardas arba SteamID64." },
@@ -19,6 +36,7 @@ export default async function Home() {
 
   return (
     <div className="flex flex-col gap-20">
+      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdHtml(JSON_LD)} />
       <section className="rise flex flex-col items-center gap-7 pt-6 text-center">
         <span className="rounded-full border border-brand-600/30 bg-brand-600/10 px-3.5 py-1.5 text-xs font-semibold text-brand-400">
           Kainos atnaujintos {timeAgo(db.updated)}
@@ -39,6 +57,7 @@ export default async function Home() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
+        <h2 className="sr-only">Kaip tai veikia</h2>
         {STEPS.map((s) => (
           <div key={s.n} className="rounded-xl border border-ink-700 bg-ink-850/60 p-5">
             <span className="grid size-8 place-items-center rounded-lg bg-brand-600/15 text-sm font-bold text-brand-400">
@@ -85,7 +104,7 @@ export default async function Home() {
 
       <section className="rounded-2xl border border-ink-700 bg-gradient-to-br from-ink-850 to-ink-900 p-8 text-center">
         <h2 className="text-2xl font-bold text-white">
-          Sekame {formatNum(db.total)} CS2 prekių kainas
+          Sekame {formatNum(db.items.length)} CS2 prekių kainas
         </h2>
         <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-ink-300">
           Kainos imamos tiesiai iš Steam Community Market ir atnaujinamos kasdien. Kiekvienai prekei

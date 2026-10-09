@@ -23,7 +23,8 @@ export function ItemCard({ item }: { item: Item }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={item.icon}
-            alt=""
+            alt={item.n}
+            aria-hidden="true"
             loading="lazy"
             className="max-h-full w-auto object-contain drop-shadow transition-transform group-hover:scale-105"
           />

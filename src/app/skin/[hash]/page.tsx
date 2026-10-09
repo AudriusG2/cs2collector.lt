@@ -6,6 +6,7 @@ import { Stat } from "@/components/Stat";
 import { formatEur, formatNum, timeAgo } from "@/lib/format";
 import { CATEGORY_LABELS, baseName, wearLabel } from "@/lib/items";
 import { loadBuff, loadHistory, loadPrices } from "@/lib/prices";
+import { jsonLdHtml, pageSeo } from "@/lib/seo";
 
 export const revalidate = 3600;
 export const dynamicParams = true;
@@ -17,11 +18,19 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const db = await loadPrices();
   const item = findItem(db, hash)?.item;
   if (!item) return { title: "Prekė nerasta" };
+  const title = `${item.n} — kaina ${formatEur(item.eur)}`;
+  const description = `${item.n} kaina Steam Market: ${formatEur(item.eur)}. Kainos istorija, retumas ir parduodamų kiekis.`;
   return {
-    title: `${item.n} — kaina ${formatEur(item.eur)}`,
-    description: `${item.n} kaina Steam Market: ${formatEur(item.eur)}. Kainos istorija, retumas ir parduodamų kiekis.`,
+    title,
+    description,
+    ...pageSeo({ path: skinPath(item.h), title, description, image: bigIcon(item.icon) }),
+    // Prekes paveikslelis kvadratinis — didelei korteliai (layout'o numatytoji) jis per mazas.
+    twitter: { card: "summary" },
   };
 }
+
+const skinPath = (h: string) => `/skin/${encodeURIComponent(h)}`;
+const bigIcon = (icon: string | null) => icon?.replace("128fx128f", "360fx360f");
 
 export async function generateStaticParams() {
   const db = await loadPrices();
@@ -77,9 +86,28 @@ export default async function SkinPage({ params }: { params: Params }) {
   const first = history[0]?.eur;
   const change = first && first > 0 ? ((item.eur - first) / first) * 100 : null;
   const heroBg = `radial-gradient(circle at 50% 45%, ${item.rarity.color}22, var(--color-ink-900) 70%)`;
+  const image = bigIcon(item.icon);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: item.n,
+    ...(image ? { image } : {}),
+    description: `${item.n} kaina Steam Market: ${formatEur(item.eur)}. Kainos istorija, retumas ir parduodamų kiekis.`,
+    category: CATEGORY_LABELS[item.category],
+    brand: { "@type": "Brand", name: "Counter-Strike 2" },
+    // AggregateOffer, ne Offer: cia kainu suvestine (pigiausias is N Steam skelbimu), o ne parduotuve.
+    offers: {
+      "@type": "AggregateOffer",
+      priceCurrency: "EUR",
+      lowPrice: item.eur.toFixed(2),
+      ...(item.l > 0 ? { offerCount: item.l } : {}),
+    },
+  };
 
   return (
     <div className="flex flex-col gap-8">
+      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdHtml(jsonLd)} />
       <nav className="flex items-center gap-2 text-sm text-ink-400">
         <Link href="/kainos" className="transition-colors hover:text-brand-400">
           Kainos
@@ -93,10 +121,10 @@ export default async function SkinPage({ params }: { params: Params }) {
           className="grid aspect-square place-items-center rounded-2xl border border-ink-700 p-8"
           style={{ background: heroBg }}
         >
-          {item.icon ? (
+          {image ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={item.icon.replace("128fx128f", "360fx360f")}
+              src={image}
               alt={item.n}
               className="max-h-full w-auto object-contain drop-shadow-2xl"
             />
@@ -192,7 +220,7 @@ export default async function SkinPage({ params }: { params: Params }) {
                   <tr key={s.h} className="bg-ink-850/60 transition-colors hover:bg-ink-800">
                     <td className="px-4 py-3">
                       <Link
-                        href={`/skin/${encodeURIComponent(s.h)}`}
+                        href={skinPath(s.h)}
                         className="font-medium text-ink-200 hover:text-brand-400"
                       >
                         {s.n}

@@ -40,10 +40,12 @@ body {
   color: #000;
 }
 
-/* Plonos slinkties juostos */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-ink-600) transparent;
+/* Plonos slinkties juostos. Sluoksnyje „base“, kad klases (pvz. [scrollbar-width:none]) galetu perrasyti. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-600) transparent;
+  }
 }
 
 @keyframes rise {

@@ -1,7 +1,6 @@
 import type { MetadataRoute } from "next";
 import { loadPrices } from "@/lib/prices";
-
-const SITE = "https://cs2collector.lt";
+import { SITE } from "@/lib/seo";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const db = await loadPrices();
@@ -14,7 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/apie`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
   ];
 
-  const items: MetadataRoute.Sitemap = db.items.slice(0, 2000).map((i) => ({
+  const items: MetadataRoute.Sitemap = db.items.map((i) => ({
     url: `${SITE}/skin/${encodeURIComponent(i.h)}`,
     lastModified: now,
     changeFrequency: "daily" as const,
