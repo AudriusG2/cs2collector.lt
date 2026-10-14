@@ -7,6 +7,7 @@ import { formatEur, formatNum, timeAgo } from "@/lib/format";
 import { CATEGORY_LABELS, baseName, wearLabel } from "@/lib/items";
 import { loadBuff, loadHistory, loadPrices } from "@/lib/prices";
 import { jsonLdHtml, pageSeo } from "@/lib/seo";
+import { Money } from "@/components/Currency";
 
 export const revalidate = 3600;
 export const dynamicParams = true;
@@ -163,10 +164,10 @@ export default async function SkinPage({ params }: { params: Params }) {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Steam kaina" value={formatEur(item.eur)} hint="pigiausias Steam pasiūlymas" />
+            <Stat label="Steam kaina" value={<Money eur={item.eur} />} hint="pigiausias Steam pasiūlymas" />
             <Stat
               label="Buff kaina"
-              value={buffPrice ? formatEur(buffPrice.eur) : "—"}
+              value={buffPrice ? <Money eur={buffPrice.eur} /> : "—"}
               accent
               hint={buffPrice ? `${formatNum(buffPrice.listings)} pasiūlymų Buff.market` : "Buff kainos nėra"}
             />
@@ -228,7 +229,7 @@ export default async function SkinPage({ params }: { params: Params }) {
                     </td>
                     <td className="px-4 py-3 text-right text-ink-400">{formatNum(s.l)} skelb.</td>
                     <td className="px-4 py-3 text-right font-bold text-brand-400">
-                      {formatEur(s.eur)}
+                      <Money eur={s.eur} />
                     </td>
                   </tr>
                 ))}

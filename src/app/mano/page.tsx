@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { InventoryBreakdown } from "@/components/InventoryBreakdown";
 import { ManoPanel } from "@/components/ManoPanel";
 import { Stat } from "@/components/Stat";
-import { formatEur, formatNum, timeAgo } from "@/lib/format";
+import { formatNum, timeAgo } from "@/lib/format";
 import { getSessionSteamId } from "@/lib/session";
 import { SteamError, getInventoryValue, getProfile } from "@/lib/steam";
 import type { InventoryResult } from "@/lib/types";
+import { Money } from "@/components/Currency";
 
 export const metadata: Metadata = {
   title: "Mano kolekcija",
@@ -113,10 +114,10 @@ export default async function ManoPage({ searchParams }: { searchParams: SP }) {
       ) : (
         result && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Steam vertė" value={formatEur(result.totalEur)} hint="inventorius, be saugyklų" />
+            <Stat label="Steam vertė" value={<Money eur={result.totalEur} />} hint="inventorius, be saugyklų" />
             <Stat
               label="Buff vertė"
-              value={formatEur(result.buffTotalEur)}
+              value={<Money eur={result.buffTotalEur} />}
               accent
               hint={result.buffUpdated ? "inventorius, be saugyklų" : "Buff kainos dar renkamos"}
             />

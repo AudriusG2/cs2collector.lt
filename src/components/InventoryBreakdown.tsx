@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { formatEur, formatNum } from "@/lib/format";
+import { formatNum } from "@/lib/format";
 import { CATEGORY_LABELS, wearShort } from "@/lib/items";
 import type { InventoryItem } from "@/lib/types";
+import { Money } from "@/components/Currency";
 
 const MAX_PRICED_ROWS = 150;
 
@@ -47,7 +48,7 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
                     />
                   </div>
                   <span className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-ink-200">
-                    {formatEur(val)}
+                    <Money eur={val} />
                   </span>
                 </div>
               );
@@ -62,8 +63,8 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <h2 className="text-lg font-bold text-white">Daiktai su kaina</h2>
             <span className="text-xs text-ink-400">
-              {formatNum(priced.reduce((s, i) => s + i.count, 0))} daiktų · Steam {formatEur(totalEur)} · Buff{" "}
-              {formatEur(buffTotal)}
+              {formatNum(priced.reduce((s, i) => s + i.count, 0))} daiktų · Steam <Money eur={totalEur} /> · Buff{" "}
+              <Money eur={buffTotal} />
             </span>
           </div>
           <div className="overflow-x-auto rounded-xl border border-ink-700">
@@ -165,8 +166,8 @@ function PriceCell({
   if (total == null) return <span className="text-ink-600">—</span>;
   return (
     <span className="inline-flex flex-col items-end">
-      <span className={className}>{formatEur(total)}</span>
-      {count > 1 && unit != null && <span className="text-[10px] text-ink-400">{formatEur(unit)}/vnt.</span>}
+      <span className={className}><Money eur={total} /></span>
+      {count > 1 && unit != null && <span className="text-[10px] text-ink-400"><Money eur={unit} />/vnt.</span>}
     </span>
   );
 }

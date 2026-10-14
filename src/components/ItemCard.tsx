@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { formatEur, formatNum } from "@/lib/format";
+import { formatNum } from "@/lib/format";
 import { wearShort } from "@/lib/items";
 import type { Item } from "@/lib/types";
+import { Money } from "@/components/Currency";
 
 export function ItemCard({ item }: { item: Item }) {
   const wear = wearShort(item.wear);
@@ -47,7 +48,7 @@ export function ItemCard({ item }: { item: Item }) {
           {item.n}
         </p>
         <div className="mt-auto flex items-end justify-between pt-2">
-          <span className="text-[15px] font-bold text-brand-400">{formatEur(item.eur)}</span>
+          <span className="text-[15px] font-bold text-brand-400"><Money eur={item.eur} /></span>
           <span className="text-[11px] text-ink-400">{formatNum(item.l)} skelb.</span>
         </div>
       </div>

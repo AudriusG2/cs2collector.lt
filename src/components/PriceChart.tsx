@@ -1,4 +1,4 @@
-import { formatEur } from "@/lib/format";
+import { Money } from "@/components/Currency";
 
 type Point = { date: string; eur: number };
 
@@ -12,7 +12,7 @@ export function PriceChart({ data }: { data: Point[] }) {
         </p>
         {data.length === 1 && (
           <p className="mt-1 text-xs text-ink-400">
-            Pirmas įrašas: {data[0].date} — {formatEur(data[0].eur)}
+            Pirmas įrašas: {data[0].date} — <Money eur={data[0].eur} />
           </p>
         )}
       </div>
@@ -63,13 +63,13 @@ export function PriceChart({ data }: { data: Point[] }) {
       </svg>
       <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-ink-400">
         <span>
-          {data[0].date} · {formatEur(data[0].eur)}
+          {data[0].date} · <Money eur={data[0].eur} />
         </span>
         <span>
-          Min {formatEur(min)} · Max {formatEur(max)}
+          Min <Money eur={min} /> · Max <Money eur={max} />
         </span>
         <span>
-          {last.date} · {formatEur(last.eur)}
+          {last.date} · <Money eur={last.eur} />
         </span>
       </div>
     </div>

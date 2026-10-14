@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CurrencyProvider, CurrencySelect } from "@/components/Currency";
+import { loadRates } from "@/lib/rates";
 import { OG_IMAGE, SITE, SITE_NAME, SITE_OG_DESCRIPTION, SITE_TITLE } from "@/lib/seo";
 import "./globals.css";
 
@@ -33,10 +35,12 @@ const NAV: { href: string; label: string; short?: string }[] = [
   { href: "/mano", label: "Mano kolekcija", short: "Kolekcija" },
 ];
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const rates = await loadRates();
   return (
     <html lang="lt">
       <body className="font-sans antialiased">
+        <CurrencyProvider rates={rates}>
         <header className="sticky top-0 z-50 border-b border-ink-700/70 bg-ink-950/80 backdrop-blur-md">
           <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 md:gap-6">
             <Link href="/" className="group flex items-center gap-2.5 shrink-0">
@@ -66,6 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </Link>
               ))}
             </nav>
+            <CurrencySelect className="hidden shrink-0 lg:block" />
           </div>
         </header>
 
@@ -79,8 +84,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <p className="text-xs">
               Nesusiję su Valve Corporation. Counter-Strike ir CS2 yra Valve prekių ženklai.
             </p>
+            <label className="flex items-center gap-2 text-xs lg:hidden">
+              Valiuta
+              <CurrencySelect />
+            </label>
           </div>
         </footer>
+        </CurrencyProvider>
       </body>
     </html>
   );

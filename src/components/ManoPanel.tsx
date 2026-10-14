@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PriceChart } from "@/components/PriceChart";
-import { formatEur, formatNum } from "@/lib/format";
+import { formatNum } from "@/lib/format";
+import { Money } from "@/components/Currency";
 
 // Saugyklu serverio adresas — viesas (ne slaptas). Perrasomas per NEXT_PUBLIC_STORAGE_URL.
 const STORAGE_URL =
@@ -272,17 +273,22 @@ export function ManoPanel({
     <div className="flex flex-col gap-8">
       <section className="rounded-2xl border border-brand-600/30 bg-gradient-to-br from-brand-600/10 to-transparent p-6">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-400">Visa kolekcija</p>
-        <p className="mt-1 text-4xl font-black tabular-nums text-white">{formatEur(grand)}</p>
+        <p className="mt-1 text-4xl font-black tabular-nums text-white"><Money eur={grand} /></p>
         <p className="mt-1 text-sm text-ink-300">
-          Inventorius {formatEur(inventoryEur ?? 0)}
-          {" + "}saugyklos {storage ? formatEur(storage.totalEur) : "neįkeltos"} · Steam kainomis
+          Inventorius <Money eur={inventoryEur ?? 0} />
+          {" + "}saugyklos {storage ? <Money eur={storage.totalEur} /> : "neįkeltos"} · Steam kainomis
         </p>
         {(inventoryBuffEur != null || storage?.buffTotalEur != null) && (
           <p className="mt-0.5 text-sm text-ink-400">
             Buff kainomis:{" "}
-            <b className="text-brand-400">{formatEur((inventoryBuffEur ?? 0) + (storage?.buffTotalEur ?? 0))}</b>{" "}
-            (inventorius {formatEur(inventoryBuffEur ?? 0)}
-            {storage?.buffTotalEur != null ? ` + saugyklos ${formatEur(storage.buffTotalEur)}` : ""})
+            <b className="text-brand-400"><Money eur={(inventoryBuffEur ?? 0) + (storage?.buffTotalEur ?? 0)} /></b>{" "}
+            (inventorius <Money eur={inventoryBuffEur ?? 0} />
+            {storage?.buffTotalEur != null && (
+              <>
+                {" + saugyklos "}
+                <Money eur={storage.buffTotalEur} />
+              </>
+            )})
           </p>
         )}
       </section>
@@ -355,7 +361,7 @@ export function ManoPanel({
               {storage.units.map((u) => (
                 <div key={u.name} className="rounded-lg border border-ink-700 bg-ink-900/50 p-3">
                   <p className="truncate text-sm font-medium text-ink-200">📦 {u.name}</p>
-                  <p className="mt-1 text-lg font-bold tabular-nums text-brand-400">{formatEur(u.totalEur)}</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-brand-400"><Money eur={u.totalEur} /></p>
                   <p className="text-xs text-ink-400">{formatNum(u.count)} daiktų</p>
                 </div>
               ))}
@@ -379,7 +385,7 @@ export function ManoPanel({
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums text-ink-400">{it.count}</td>
                       <td className="px-4 py-2 text-right font-bold tabular-nums text-brand-400">
-                        {formatEur(it.totalEur)}
+                        <Money eur={it.totalEur} />
                       </td>
                     </tr>
                   ))}
