@@ -48,14 +48,24 @@ const startPage = argNum("--start", 1);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const today = () => Number(new Date().toISOString().slice(0, 10).replaceAll("-", ""));
 
+// USD→EUR kurso saltiniai: pirmas ECB (Frankfurter), jei neveikia — atsarginis be rakto.
+const RATE_SOURCES = [
+  ["Frankfurter", "https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR", (j) => j?.rates?.EUR],
+  ["currency-api", "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json", (j) => j?.usd?.eur],
+];
+
 async function usdToEur() {
-  const res = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR", {
-    signal: AbortSignal.timeout(20_000),
-  });
-  const j = await res.json();
-  const rate = j?.rates?.EUR;
-  if (!(rate > 0)) throw new Error("Nepavyko gauti USD→EUR kurso");
-  return rate;
+  for (const [name, url, pick] of RATE_SOURCES) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      const rate = Number(pick(await res.json()));
+      if (rate > 0.5 && rate < 1.5) return rate;
+      console.warn(`${name}: netinkamas kursas ${rate}`);
+    } catch (err) {
+      console.warn(`${name}: ${err.message}`);
+    }
+  }
+  throw new Error("Nepavyko gauti USD→EUR kurso");
 }
 
 async function loadExisting() {
