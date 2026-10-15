@@ -37,6 +37,30 @@ const GC_TIMEOUT_MS = 90_000;
 const SESSION_TTL_MS = 6 * 60 * 1000; // sesija gyvuoja ne ilgiau nei 6 min
 const MAX_ACTIVE = Number(process.env.MAX_ACTIVE ?? 20);
 
+// Vienas IP gali pradeti ne daugiau kaip START_LIMIT sesiju per START_WINDOW_MS,
+// kad vienas zmogus negaletu uzimti visu MAX_ACTIVE vietu.
+const START_LIMIT = Number(process.env.START_LIMIT ?? 3);
+const START_WINDOW_MS = 10 * 60 * 1000;
+const startsByIp = new Map(); // ip -> laiku sarasas
+
+function clientIp(req) {
+  // Fly.io proxy pats nustato Fly-Client-IP; kitu antrasciu (X-Forwarded-For) nepasitikim
+  return String(req.headers["fly-client-ip"] || req.socket.remoteAddress || "unknown");
+}
+
+function allowStart(ip) {
+  const now = Date.now();
+  const recent = (startsByIp.get(ip) || []).filter((t) => now - t < START_WINDOW_MS);
+  if (recent.length >= START_LIMIT) {
+    startsByIp.set(ip, recent);
+    return false;
+  }
+  recent.push(now);
+  startsByIp.set(ip, recent);
+  if (startsByIp.size > 10_000) startsByIp.clear(); // apsauga nuo atminties augimo
+  return true;
+}
+
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "https://cs2collector.lt,https://www.cs2collector.lt")
   .split(",")
   .map((s) => s.trim())
@@ -239,7 +263,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
 
   if (req.method === "GET" && url.pathname === "/health") {
-    return json(res, 200, { ok: true, active: sessions.size });
+    return json(res, 200, { ok: true });
   }
 
   if (req.method === "POST" && url.pathname === "/api/storage/start") {
@@ -247,6 +271,7 @@ const server = createServer(async (req, res) => {
     const now = Date.now();
     for (const [id, s] of sessions) if (now > s.expiresAt) destroySession(id);
     if (sessions.size >= MAX_ACTIVE) return json(res, 503, { error: "Serveris užimtas, pabandyk po minutės" });
+    if (!allowStart(clientIp(req))) return json(res, 429, { error: "Per daug bandymų — pabandyk po kelių minučių" });
 
     const id = randomUUID();
     const session = { id, state: "starting", expiresAt: Date.now() + SESSION_TTL_MS };

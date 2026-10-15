@@ -82,16 +82,38 @@ export default {
       "X-Requested-With": "XMLHttpRequest",
     });
 
+    // Nukreipimus sekam patys ir tik i leidziamus Steam domenus (ne "follow" — apsauga nuo SSRF per redirect).
     let upstream;
     try {
       if (isPost) headers.set("Content-Type", "application/x-www-form-urlencoded");
-      upstream = await fetch(target.toString(), {
-        method: request.method,
-        body: isPost ? await request.text() : undefined,
-        headers,
-        redirect: "follow",
-        cf: { cacheTtl: 0, cacheEverything: false },
-      });
+      let url = target;
+      let method = request.method;
+      let body = isPost ? await request.text() : undefined;
+      for (let hop = 0; ; hop++) {
+        upstream = await fetch(url.toString(), {
+          method,
+          body,
+          headers,
+          redirect: "manual",
+          cf: { cacheTtl: 0, cacheEverything: false },
+        });
+        const loc = upstream.status >= 300 && upstream.status < 400 && upstream.headers.get("location");
+        if (!loc) break;
+        if (hop >= 5) return deny(502, "Per daug nukreipimu");
+        try {
+          url = new URL(loc, url);
+        } catch {
+          return deny(502, "Blogas nukreipimas");
+        }
+        if (url.protocol !== "https:" || !ALLOWED_HOSTS.has(url.hostname.toLowerCase())) {
+          return deny(502, "Nukreipimas ne i Steam");
+        }
+        if (upstream.status === 303 || ((upstream.status === 301 || upstream.status === 302) && method === "POST")) {
+          method = "GET";
+          body = undefined;
+          headers.delete("Content-Type");
+        }
+      }
     } catch (err) {
       return deny(502, `Nepavyko pasiekti Steam: ${err.message}`);
     }

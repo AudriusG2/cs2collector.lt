@@ -3,6 +3,7 @@ import { InventoryBreakdown } from "@/components/InventoryBreakdown";
 import { ManoPanel } from "@/components/ManoPanel";
 import { Stat } from "@/components/Stat";
 import { formatNum, timeAgo } from "@/lib/format";
+import { LOGIN_ERRORS } from "@/lib/openid";
 import { getSessionSteamId } from "@/lib/session";
 import { SteamError, getInventoryValue, getProfile } from "@/lib/steam";
 import type { InventoryResult } from "@/lib/types";
@@ -23,7 +24,9 @@ const BENEFITS = [
 
 export default async function ManoPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const loginError = typeof sp.klaida === "string" ? sp.klaida : null;
+  // Rodom tik savo klaidu tekstus — ne bet koki teksta is adreso
+  const loginError =
+    typeof sp.klaida === "string" ? (LOGIN_ERRORS.includes(sp.klaida) ? sp.klaida : "Nepavyko prisijungti") : null;
   const steamId = await getSessionSteamId();
 
   if (!steamId) {

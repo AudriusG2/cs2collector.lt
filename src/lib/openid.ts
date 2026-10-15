@@ -1,4 +1,5 @@
 import { steamFetch } from "./fetcher";
+import { SITE } from "./seo";
 
 /**
  * Steam OpenID 2.0 — oficialus „Sign in through Steam".
@@ -12,19 +13,36 @@ const IDENTIFIER_SELECT = "http://specs.openid.net/auth/2.0/identifier_select";
 const CLAIMED_ID_RE = /^https:\/\/steamcommunity\.com\/openid\/id\/(7656119\d{10})$/;
 const NONCE_MAX_AGE_MS = 5 * 60 * 1000;
 
+/** Svetaines adresas. Gamyboje niekada neimamas is uzklausos (Host antraste valdo siuntejas). */
 export function siteOrigin(request: Request): string {
-  return (process.env.SITE_URL ?? new URL(request.url).origin).replace(/\/$/, "");
+  const fallback = process.env.NODE_ENV === "production" ? SITE : new URL(request.url).origin;
+  return (process.env.SITE_URL || fallback).replace(/\/$/, "");
 }
 
-export function callbackUrl(origin: string): string {
-  return `${origin}/api/auth/steam/callback`;
+/** Prisijungimo busenos slapukas: susieja Steam atsakyma su ta pacia narsykle (apsauga nuo login CSRF). */
+export const STATE_COOKIE = "cs2c_state";
+
+export function callbackUrl(origin: string, state: string): string {
+  return `${origin}/api/auth/steam/callback?s=${encodeURIComponent(state)}`;
 }
 
-export function buildLoginUrl(origin: string): string {
+/** Klaidu tekstai, kuriuos /mano gali rodyti (kitokio ?klaida= teksto nerodom) */
+export const LOGIN_ERRORS = [
+  "Prisijungimas atšauktas",
+  "Neteisingas tiekėjas",
+  "Neteisingas grįžimo adresas",
+  "Neteisingas Steam identifikatorius",
+  "Prisijungimo nuoroda pasenusi — bandyk dar kartą",
+  "Steam nepatvirtino prisijungimo",
+  "Prisijungimo sesija nebegalioja — bandyk dar kartą",
+  "Nepavyko prisijungti",
+];
+
+export function buildLoginUrl(origin: string, state: string): string {
   const params = new URLSearchParams({
     "openid.ns": NS,
     "openid.mode": "checkid_setup",
-    "openid.return_to": callbackUrl(origin),
+    "openid.return_to": callbackUrl(origin, state),
     "openid.realm": origin,
     "openid.identity": IDENTIFIER_SELECT,
     "openid.claimed_id": IDENTIFIER_SELECT,
@@ -39,10 +57,11 @@ export class OpenIdError extends Error {}
  *  1) vietines patikros (return_to, op_endpoint, claimed_id formatas, nonce senumas);
  *  2) parasa patvirtina pats Steam per check_authentication.
  */
-export async function verifyAssertion(search: URLSearchParams, origin: string): Promise<string> {
+export async function verifyAssertion(search: URLSearchParams, origin: string, state: string | undefined): Promise<string> {
   if (search.get("openid.mode") !== "id_res") throw new OpenIdError("Prisijungimas atšauktas");
+  if (!state || search.get("s") !== state) throw new OpenIdError("Prisijungimo sesija nebegalioja — bandyk dar kartą");
   if (search.get("openid.op_endpoint") !== OP_ENDPOINT) throw new OpenIdError("Neteisingas tiekėjas");
-  if (search.get("openid.return_to") !== callbackUrl(origin)) throw new OpenIdError("Neteisingas grįžimo adresas");
+  if (search.get("openid.return_to") !== callbackUrl(origin, state)) throw new OpenIdError("Neteisingas grįžimo adresas");
 
   const claimed = search.get("openid.claimed_id") ?? "";
   const identity = search.get("openid.identity") ?? "";
