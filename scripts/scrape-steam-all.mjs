@@ -18,6 +18,9 @@
  *   node scripts/scrape-steam-all.mjs               # 1500 puslapiu nuo cursor
  *   node scripts/scrape-steam-all.mjs --pages 4000  # visas katalogas
  *   node scripts/scrape-steam-all.mjs --start 0     # nuo pradziu
+ *   node scripts/scrape-steam-all.mjs --minutes 50  # baigti po 50 min.
+ *
+ * Kasdieniame GitHub Action paleidziamas is scrape-prices.mjs pabaigos.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -37,6 +40,8 @@ const argNum = (name, fallback) => {
 };
 const maxPages = argNum("--pages", 1500);
 const startArg = argNum("--start", null);
+// Laiko biudzetas minutemis: sustojam patys ir issaugom tiksly cursor
+const deadline = Date.now() + argNum("--minutes", Infinity) * 60_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stamp = (d = new Date()) => Number(d.toISOString().slice(0, 10).replaceAll("-", ""));
@@ -98,6 +103,10 @@ async function main() {
   let page = 0;
   let failedInRow = 0;
   while (page < maxPages) {
+    if (Date.now() > deadline) {
+      console.log("Baigėsi laiko biudžetas — sustojam.");
+      break;
+    }
     let json;
     try {
       json = await fetchPage(start);

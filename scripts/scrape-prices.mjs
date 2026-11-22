@@ -8,10 +8,15 @@
  *   node scripts/scrape-prices.mjs            # ~4000 populiariausiu
  *   node scripts/scrape-prices.mjs --all      # visas katalogas (~35k, ~2.5 val.)
  *   node scripts/scrape-prices.mjs --pages 50
+ *   node scripts/scrape-prices.mjs --with-all   # + viso katalogo dalis (scrape-steam-all.mjs)
+ *
+ * GitHub Action'e (GITHUB_ACTIONS) viso katalogo dalis renkama automatiskai —
+ * tiek, kiek leidzia darbo laiko limitas (ALL_BUDGET_MIN, numatyta 80 min. viso darbo).
  */
 import { writeFile, readFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const DATA = path.join(ROOT, "data");
@@ -23,6 +28,8 @@ const args = process.argv.slice(2);
 const wantAll = args.includes("--all");
 const pagesArg = args.indexOf("--pages");
 const maxPages = wantAll ? Infinity : pagesArg !== -1 ? Number(args[pagesArg + 1]) : 400;
+const withAll = args.includes("--with-all") || process.env.GITHUB_ACTIONS === "true";
+const STARTED = Date.now();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -105,6 +112,29 @@ async function main() {
   await writeFile(idxPath, JSON.stringify(idx));
 
   console.log(`\nOK — ${list.length} prekiu issaugota (${today}). Katalogo dydis: ${total}.`);
+
+  if (withAll && !wantAll) runCatalogPart();
+}
+
+/**
+ * Likusio katalogo dalis (pigus ir reti daiktai) — atskiru procesu, kad jo klaida
+ * nesugadintu jau issaugotu populiariuju kainu. Laikas skaiciuojamas taip, kad
+ * visas darbas tilptu i Action limita (90 min.) ir dar liktu laiko commit'ui.
+ */
+function runCatalogPart() {
+  const budget = Number(process.env.ALL_BUDGET_MIN ?? 80);
+  const left = Math.floor(budget - (Date.now() - STARTED) / 60_000);
+  if (left < 1) {
+    console.log("Viso katalogo daliai laiko neliko — praleidžiam.");
+    return;
+  }
+  console.log(`\nRenkama viso katalogo dalis (${left} min.)…`);
+  const r = spawnSync(
+    process.execPath,
+    [path.join(ROOT, "scripts", "scrape-steam-all.mjs"), "--pages", "3600", "--minutes", String(left)],
+    { stdio: "inherit", env: process.env },
+  );
+  if (r.status !== 0) console.warn("Viso katalogo dalis nepavyko — tęsim kitą kartą.");
 }
 
 main().catch((e) => {

@@ -47,9 +47,14 @@ const argNum = (name, fallback) => {
   return i !== -1 ? Number(args[i + 1]) : fallback;
 };
 const maxPages = argNum("--pages", Infinity);
-const startArg = argNum("--start", null);
+// Suplanuotas Action'as visada perduoda „--start 1" — tada tesiam nuo nextPage.
+// Rankiniam paleidimui (workflow_dispatch) nurodytas puslapis gerbiamas.
+const scheduled = process.env.GITHUB_EVENT_NAME === "schedule";
+const startArg = scheduled ? null : argNum("--start", null);
 // Laiko biudzetas minutemis: baigiam patys ir issaugom tikslu `nextPage`, kol darbo nenutrauke CI
-const deadline = Date.now() + argNum("--minutes", Infinity) * 60_000;
+// (Action'o zingsnio limitas 320 min.)
+const defaultMinutes = process.env.GITHUB_ACTIONS === "true" ? 305 : Infinity;
+const deadline = Date.now() + argNum("--minutes", defaultMinutes) * 60_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const today = () => Number(new Date().toISOString().slice(0, 10).replaceAll("-", ""));
