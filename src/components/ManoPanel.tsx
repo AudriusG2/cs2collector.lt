@@ -21,15 +21,85 @@ type Priced = {
   buffTotalEur?: number | null;
 };
 
+/** Nuskaitytas saugyklos turinys: [market_hash_name, kiekis] */
+type RawUnit = { name: string; items: [string, number][] };
+
 type StorageState = {
+  /** Kada saugyklos nuskaitytos */
   importedAt: string;
-  units: { name: string; count: number; totalEur: number }[];
+  /** Kada paskutini karta ikainota (kainos perskaiciuojamos kiekvieno apsilankymo metu) */
+  pricedAt?: string;
+  /** Saugyklu turinys — kad galetume ikainoti is naujo. Senuose irasuose jo nera. */
+  rawUnits?: RawUnit[];
+  units: { name: string; count: number; totalEur: number | null }[];
   items: Priced[];
+  /** Tik Steam kainomis */
   totalEur: number;
   buffTotalEur?: number;
+  /** Steam, o kur nera — Buff */
+  steamFirstEur?: number;
+  /** Buff, o kur nera — Steam */
+  buffFirstEur?: number;
   pricedCount: number;
+  steamPricedCount?: number;
+  buffPricedCount?: number;
   unpricedCount: number;
 };
+
+type PricedResponse = {
+  items: Priced[];
+  totalEur: number;
+  buffTotalEur: number;
+  steamFirstEur: number;
+  buffFirstEur: number;
+  pricedCount: number;
+  steamPricedCount: number;
+  buffPricedCount: number;
+  unpricedCount: number;
+};
+
+async function priceLines(lines: { hash: string; count: number }[]): Promise<PricedResponse> {
+  const res = await fetch("/api/ikainoti", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: lines }),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Nepavyko įkainoti.");
+  return (await res.json()) as PricedResponse;
+}
+
+/** Steam kaina, o jei jos nera — Buff (vienetui) */
+const unitSteamFirst = (i: Priced) => i.unitEur ?? i.buffUnitEur ?? null;
+
+/**
+ * Ikainoja saugyklas dabartinemis kainomis. Jei turinio (rawUnits) neturim —
+ * senas irasas — ikainojam bendra daiktu sarasa, o saugyklu sumos lieka nezinomos.
+ */
+async function priceStorage(prev: Pick<StorageState, "importedAt" | "rawUnits" | "units" | "items">): Promise<StorageState> {
+  const lines = prev.rawUnits
+    ? prev.rawUnits.flatMap((u) => u.items.map(([hash, count]) => ({ hash, count })))
+    : prev.items.map((i) => ({ hash: i.hash, count: i.count }));
+  if (!lines.length) throw new Error("Saugyklose nerasta daiktų.");
+  const priced = await priceLines(lines);
+  const unit = new Map(priced.items.map((i) => [i.hash, unitSteamFirst(i) ?? 0]));
+  return {
+    ...priced,
+    importedAt: prev.importedAt,
+    pricedAt: new Date().toISOString(),
+    rawUnits: prev.rawUnits,
+    units: prev.rawUnits
+      ? prev.rawUnits.map((u) => ({
+          name: u.name,
+          count: u.items.reduce((s, [, c]) => s + c, 0),
+          totalEur: u.items.reduce((s, [h, c]) => s + (unit.get(h) ?? 0) * c, 0),
+        }))
+      : prev.units.map((u) => ({ ...u, totalEur: null })),
+  };
+}
+
+/** Saugyklu verte su atsargine kaina (senuose irasuose — tik Steam) */
+const storageSteamFirst = (s: StorageState | null) => (s ? (s.steamFirstEur ?? s.totalEur) : 0);
+const storageBuffFirst = (s: StorageState | null) => (s ? (s.buffFirstEur ?? s.buffTotalEur ?? 0) : 0);
 
 type HistoryPoint = { date: string; eur: number };
 type ImportUnit = { name?: string; items?: { hash?: string; count?: number }[] };
@@ -95,32 +165,13 @@ export function ManoPanel({
 
   const importUnits = useCallback(
     async (units: ImportUnit[]) => {
-      const lines = units.flatMap((u) =>
-        (u.items ?? []).map((it) => ({ hash: String(it.hash ?? ""), count: Number(it.count) || 1 })),
-      );
-      if (!lines.length) throw new Error("Saugyklose nerasta daiktų.");
-
-      const res = await fetch("/api/ikainoti", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: lines }),
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Nepavyko įkainoti.");
-      const priced = (await res.json()) as Omit<StorageState, "importedAt" | "units">;
-
-      const unitPrice = new Map(priced.items.map((i) => [i.hash, i.unitEur ?? 0]));
-      const state: StorageState = {
-        ...priced,
-        importedAt: new Date().toISOString(),
-        units: units.map((u, idx) => {
-          const items = u.items ?? [];
-          return {
-            name: u.name?.trim() || `Saugykla ${idx + 1}`,
-            count: items.reduce((s, it) => s + (Number(it.count) || 1), 0),
-            totalEur: items.reduce((s, it) => s + (unitPrice.get(String(it.hash)) ?? 0) * (Number(it.count) || 1), 0),
-          };
-        }),
-      };
+      const rawUnits: RawUnit[] = units.map((u, idx) => ({
+        name: u.name?.trim() || `Saugykla ${idx + 1}`,
+        items: (u.items ?? [])
+          .map((it) => [String(it.hash ?? ""), Math.max(1, Number(it.count) || 1)] as [string, number])
+          .filter(([h]) => h),
+      }));
+      const state = await priceStorage({ importedAt: new Date().toISOString(), rawUnits, units: [], items: [] });
       writeJson(storageKey(steamId), state);
       setStorage(state);
       return state;
@@ -128,22 +179,53 @@ export function ManoPanel({
     [steamId],
   );
 
+  // Issaugotos saugyklos ikainojamos is naujo dabartinemis kainomis
+  const [storageLoaded, setStorageLoaded] = useState(false);
   useEffect(() => {
+    let cancelled = false;
     const saved = readJson<StorageState>(storageKey(steamId));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage pasiekiamas tik po hidratacijos
     setStorage(saved);
-    const hist = readJson<HistoryPoint[]>(histKey(steamId)) ?? [];
-    if (inventoryEur != null) {
-      const today = new Date().toISOString().slice(0, 10);
-      const total = Math.round((inventoryEur + (saved?.totalEur ?? 0)) * 100) / 100;
-      const next = [...hist.filter((p) => p.date !== today), { date: today, eur: total }]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-365);
-      writeJson(histKey(steamId), next);
-      setHistory(next);
-    } else {
-      setHistory(hist);
+    if (!saved) {
+      setStorageLoaded(true);
+      return;
     }
-  }, [steamId, inventoryEur]);
+    priceStorage(saved)
+      .then((fresh) => {
+        if (cancelled) return;
+        // Kol skaiciavom, galejo buti ikeltos naujos saugyklos — ju neperrasom senomis
+        const current = readJson<StorageState>(storageKey(steamId));
+        if (current?.importedAt !== saved.importedAt) return;
+        writeJson(storageKey(steamId), fresh);
+        setStorage(fresh);
+      })
+      .catch(() => {
+        /* liekam su issaugotomis kainomis */
+      })
+      .finally(() => {
+        if (!cancelled) setStorageLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [steamId]);
+
+  // Vertes istorija: sios dienos irasas perrasomas naujausia suma
+  useEffect(() => {
+    const hist = readJson<HistoryPoint[]>(histKey(steamId)) ?? [];
+    if (inventoryEur == null || !storageLoaded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage pasiekiamas tik po hidratacijos
+      setHistory(hist);
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const total = Math.round((inventoryEur + storageSteamFirst(storage)) * 100) / 100;
+    const next = [...hist.filter((p) => p.date !== today), { date: today, eur: total }]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-365);
+    writeJson(histKey(steamId), next);
+    setHistory(next);
+  }, [steamId, inventoryEur, storage, storageLoaded]);
 
   // Automatinis ikelimas is programos (adresas su #saugyklos=)
   useEffect(() => {
@@ -266,7 +348,10 @@ export function ManoPanel({
     setNotice(null);
   }
 
-  const grand = (inventoryEur ?? 0) + (storage?.totalEur ?? 0);
+  const grand = (inventoryEur ?? 0) + storageSteamFirst(storage);
+  const grandBuff = (inventoryBuffEur ?? inventoryEur ?? 0) + storageBuffFirst(storage);
+  const storageUnpriced = storage ? storage.items.filter((i) => i.unitEur == null && i.buffUnitEur == null) : [];
+  const storageOnlyBuff = storage ? storage.items.filter((i) => i.unitEur == null && i.buffUnitEur != null) : [];
   const onlineBusy = online === "starting" || online === "qr" || online === "confirming" || online === "reading";
 
   return (
@@ -276,21 +361,23 @@ export function ManoPanel({
         <p className="mt-1 text-4xl font-black tabular-nums text-white"><Money eur={grand} /></p>
         <p className="mt-1 text-sm text-ink-300">
           Inventorius <Money eur={inventoryEur ?? 0} />
-          {" + "}saugyklos {storage ? <Money eur={storage.totalEur} /> : "neįkeltos"} · Steam kainomis
+          {" + "}saugyklos {storage ? <Money eur={storageSteamFirst(storage)} /> : "neįkeltos"} · Steam kainomis*
         </p>
-        {(inventoryBuffEur != null || storage?.buffTotalEur != null) && (
+        {(inventoryBuffEur != null || storage?.buffFirstEur != null) && (
           <p className="mt-0.5 text-sm text-ink-400">
-            Buff kainomis:{" "}
-            <b className="text-brand-400"><Money eur={(inventoryBuffEur ?? 0) + (storage?.buffTotalEur ?? 0)} /></b>{" "}
-            (inventorius <Money eur={inventoryBuffEur ?? 0} />
-            {storage?.buffTotalEur != null && (
+            Buff kainomis*: <b className="text-brand-400"><Money eur={grandBuff} /></b> (inventorius{" "}
+            <Money eur={inventoryBuffEur ?? inventoryEur ?? 0} />
+            {storage && (
               <>
                 {" + saugyklos "}
-                <Money eur={storage.buffTotalEur} />
+                <Money eur={storageBuffFirst(storage)} />
               </>
             )})
           </p>
         )}
+        <p className="mt-2 text-[11px] text-ink-400">
+          * Jei daiktas neturi Steam kainos, skaičiuojama jo Buff kaina (ir atvirkščiai), kad niekas neiškristų iš sumos.
+        </p>
       </section>
 
       <section>
@@ -358,17 +445,33 @@ export function ManoPanel({
               </button>
             )}
             <div className="grid gap-3 sm:grid-cols-3">
-              {storage.units.map((u) => (
-                <div key={u.name} className="rounded-lg border border-ink-700 bg-ink-900/50 p-3">
+              {storage.units.map((u, idx) => (
+                <div key={`${u.name}-${idx}`} className="rounded-lg border border-ink-700 bg-ink-900/50 p-3">
                   <p className="truncate text-sm font-medium text-ink-200">📦 {u.name}</p>
-                  <p className="mt-1 text-lg font-bold tabular-nums text-brand-400"><Money eur={u.totalEur} /></p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-brand-400">
+                    {u.totalEur != null ? <Money eur={u.totalEur} /> : "—"}
+                  </p>
                   <p className="text-xs text-ink-400">{formatNum(u.count)} daiktų</p>
                 </div>
               ))}
             </div>
+            {!storage.rawUnits && (
+              <p className="text-xs text-amber-300/90">
+                Saugyklos įkeltos senesne svetainės versija: bendra vertė perskaičiuota šiandienos kainomis, bet
+                atskirų saugyklų vertei reikia jas nuskaityti iš naujo.
+              </p>
+            )}
 
             <div className="overflow-x-auto rounded-xl border border-ink-700">
-              <table className="w-full min-w-[480px] text-sm">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead className="bg-ink-850">
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-ink-400">
+                    <th className="px-4 py-2 font-semibold">Prekė</th>
+                    <th className="px-4 py-2 text-right font-semibold">Kiekis</th>
+                    <th className="px-4 py-2 text-right font-semibold">Steam</th>
+                    <th className="px-4 py-2 text-right font-semibold">Buff</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-ink-700/70">
                   {storage.items.slice(0, 50).map((it) => (
                     <tr key={it.hash} className="bg-ink-900/40">
@@ -384,8 +487,15 @@ export function ManoPanel({
                         </div>
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums text-ink-400">{it.count}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-ink-200">
+                        {it.totalEur != null ? <Money eur={it.totalEur} /> : <span className="text-ink-600">—</span>}
+                      </td>
                       <td className="px-4 py-2 text-right font-bold tabular-nums text-brand-400">
-                        <Money eur={it.totalEur} />
+                        {it.buffTotalEur != null ? (
+                          <Money eur={it.buffTotalEur} />
+                        ) : (
+                          <span className="font-normal text-ink-600">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -395,13 +505,35 @@ export function ManoPanel({
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-400">
               <span>
-                Įkelta {new Date(storage.importedAt).toLocaleString("lt-LT")}
-                {storage.unpricedCount > 0 && ` · ${formatNum(storage.unpricedCount)} daiktų be kainos`}
+                Nuskaityta {new Date(storage.importedAt).toLocaleDateString("lt-LT")}
+                {storage.pricedAt && ` · kainos perskaičiuotos ${new Date(storage.pricedAt).toLocaleString("lt-LT")}`}
+                {` · įkainota ${formatNum(storage.pricedCount)} iš ${formatNum(storage.pricedCount + storage.unpricedCount)}`}
+                {storageOnlyBuff.length > 0 && ` (${formatNum(storageOnlyBuff.reduce((s, i) => s + i.count, 0))} tik Buff kaina)`}
               </span>
               <button type="button" onClick={clearStorage} className="text-ink-300 underline hover:text-white">
                 Pašalinti saugyklų duomenis
               </button>
             </div>
+
+            {storageUnpriced.length > 0 && (
+              <details className="text-xs text-ink-400">
+                <summary className="cursor-pointer select-none hover:text-ink-200">
+                  Be kainos: {formatNum(storageUnpriced.reduce((s, i) => s + i.count, 0))} daiktų — kodėl?
+                </summary>
+                <p className="mt-2 leading-relaxed">
+                  Šių daiktų šiuo metu niekas neparduoda nei Steam Market, nei Buff.market (dažniausiai pigūs lipdukai,
+                  grafičiai ar suvenyrai), arba jų kaina dar nesurinkta — kainų bazė pildoma kasdien.
+                </p>
+                <ul className="mt-2 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+                  {storageUnpriced.slice(0, 200).map((it) => (
+                    <li key={it.hash} className="truncate">
+                      {it.name}
+                      {it.count > 1 ? ` ×${it.count}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         )}
 

@@ -7,23 +7,29 @@ import { Money } from "@/components/Currency";
 const MAX_PRICED_ROWS = 150;
 
 const bestValue = (i: InventoryItem) => Math.max(i.buffTotalEur ?? -1, i.totalEur ?? -1);
+/** Steam verte, o jei Steam kainos nera — Buff */
+const steamFirst = (i: InventoryItem) => i.totalEur ?? i.buffTotalEur ?? 0;
 
 /**
  * Inventoriaus detalizacija: verte pagal kategorijas, daiktai su kaina (Steam ir
  * Buff greta) ir atskirai daiktai be jokios kainos su priezastimi.
  * Naudojama /inventorius ir /mano.
  */
-export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]; totalEur: number }) {
+export function InventoryBreakdown({ items }: { items: InventoryItem[] }) {
   const priced = items
     .filter((i) => i.totalEur != null || i.buffTotalEur != null)
     .sort((a, b) => bestValue(b) - bestValue(a));
   const unpriced = items.filter((i) => i.totalEur == null && i.buffTotalEur == null);
 
   const byCategory = new Map<string, number>();
-  for (const it of priced) byCategory.set(it.category, (byCategory.get(it.category) ?? 0) + (it.totalEur ?? 0));
+  for (const it of priced) byCategory.set(it.category, (byCategory.get(it.category) ?? 0) + steamFirst(it));
   const categories = [...byCategory.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const categoriesTotal = categories.reduce((s, [, v]) => s + v, 0);
+  const withoutSteam = priced.filter((i) => i.totalEur == null).reduce((s, i) => s + i.count, 0);
+  const withoutBuff = priced.filter((i) => i.buffTotalEur == null).reduce((s, i) => s + i.count, 0);
 
   const shown = priced.slice(0, MAX_PRICED_ROWS);
+  const steamTotal = priced.reduce((s, i) => s + (i.totalEur ?? 0), 0);
   const buffTotal = priced.reduce((s, i) => s + (i.buffTotalEur ?? 0), 0);
   const unpricedTotal = unpriced.reduce((s, i) => s + i.count, 0);
   const notMarketable = unpriced.filter((i) => !i.marketable).reduce((s, i) => s + i.count, 0);
@@ -35,10 +41,10 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
           <h2 className="mb-3 text-lg font-bold text-white">Vertė pagal kategoriją</h2>
           <div className="flex flex-col gap-2">
             {categories.map(([cat, val]) => {
-              const pct = totalEur > 0 ? (val / totalEur) * 100 : 0;
+              const pct = categoriesTotal > 0 ? (val / categoriesTotal) * 100 : 0;
               return (
                 <div key={cat} className="flex items-center gap-3">
-                  <span className="w-24 shrink-0 text-sm text-ink-300">
+                  <span className="w-32 shrink-0 text-sm text-ink-300">
                     {CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] ?? cat}
                   </span>
                   <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-ink-800">
@@ -54,7 +60,9 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
               );
             })}
           </div>
-          <p className="mt-2 text-[11px] text-ink-400">Pagal Steam Market kainas.</p>
+          <p className="mt-2 text-[11px] text-ink-400">
+            Pagal Steam Market kainas{withoutSteam > 0 && `; ${formatNum(withoutSteam)} daiktų be Steam kainos įskaičiuoti Buff kaina`}.
+          </p>
         </section>
       )}
 
@@ -63,7 +71,7 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <h2 className="text-lg font-bold text-white">Daiktai su kaina</h2>
             <span className="text-xs text-ink-400">
-              {formatNum(priced.reduce((s, i) => s + i.count, 0))} daiktų · Steam <Money eur={totalEur} /> · Buff{" "}
+              {formatNum(priced.reduce((s, i) => s + i.count, 0))} daiktų · Steam <Money eur={steamTotal} /> · Buff{" "}
               <Money eur={buffTotal} />
             </span>
           </div>
@@ -101,8 +109,10 @@ export function InventoryBreakdown({ items, totalEur }: { items: InventoryItem[]
             </table>
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
-            Steam — pigiausias Steam Market pasiūlymas. Buff — pigiausias Buff.market pasiūlymas, perskaičiuotas į
-            eurus; paprastai artimesnis realiai prekiautojų kainai.
+            Steam — pigiausias Steam Market pasiūlymas. Buff — pigiausias Buff.market pasiūlymas (Buff kainos yra
+            doleriais, rodome perskaičiuotas pasirinkta valiuta); paprastai artimesnis realiai prekiautojų kainai.
+            {withoutSteam > 0 && ` ${formatNum(withoutSteam)} daiktų turi tik Buff kainą,`}
+            {withoutBuff > 0 && ` ${formatNum(withoutBuff)} — tik Steam kainą (Buff jų šiuo metu neparduoda arba dar nesurinko).`}
             {priced.length > shown.length && ` Rodoma ${shown.length} brangiausių iš ${formatNum(priced.length)}.`}
           </p>
         </section>

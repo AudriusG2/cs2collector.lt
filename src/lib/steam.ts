@@ -1,6 +1,6 @@
 import { steamFetch } from "./fetcher";
 import { categorise, iconUrl, rarityFromColor, wearFromName } from "./items";
-import { loadBuff, loadPrices } from "./prices";
+import { loadPriceLookup, pick } from "./prices";
 import type { InventoryItem, InventoryResult, StorageUnit } from "./types";
 
 const UA =
@@ -280,22 +280,20 @@ async function fetchEntries(steamId: string): Promise<NormalisedEntry[]> {
 }
 
 export async function getInventoryValue(steamId: string): Promise<InventoryResult> {
-  const [entries, db, buff, profile] = await Promise.all([
-    fetchEntries(steamId),
-    loadPrices(),
-    loadBuff(),
-    getProfile(steamId),
-  ]);
+  const [entries, prices, profile] = await Promise.all([fetchEntries(steamId), loadPriceLookup(), getProfile(steamId)]);
 
   const items: InventoryItem[] = [];
   const storageUnits: StorageUnit[] = [];
   let totalEur = 0;
+  let buffTotalEur = 0;
+  let steamFirstEur = 0;
+  let buffFirstEur = 0;
   let pricedCount = 0;
+  let steamPricedCount = 0;
+  let buffPricedCount = 0;
   let unpricedCount = 0;
   let itemCount = 0;
   let storedItemCount = 0;
-  let buffTotalEur = 0;
-  let buffPricedCount = 0;
 
   for (const e of entries) {
     if (e.storedCount > 0) {
@@ -308,23 +306,29 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
       storedItemCount += e.storedCount;
     }
 
-    const price = db.byHash.get(e.hash);
-    const unitEur = price ? price.eur : null;
+    const q = prices.quote(e.hash);
+    const unitEur = q.steam;
+    const buffUnitEur = q.buff;
     const totalItemEur = unitEur != null ? unitEur * e.count : null;
-    const buffPrice = buff.byHash.get(e.hash);
-    const buffUnitEur = buffPrice ? buffPrice.eur : null;
     const buffItemEur = buffUnitEur != null ? buffUnitEur * e.count : null;
+
+    if (totalItemEur != null) {
+      totalEur += totalItemEur;
+      steamPricedCount += e.count;
+    }
     if (buffItemEur != null) {
       buffTotalEur += buffItemEur;
       buffPricedCount += e.count;
     }
-
-    if (totalItemEur != null) {
-      totalEur += totalItemEur;
+    const sf = pick(q, "steam").eur;
+    const bf = pick(q, "buff").eur;
+    if (sf != null) {
+      steamFirstEur += sf * e.count;
       pricedCount += e.count;
     } else {
       unpricedCount += e.count;
     }
+    if (bf != null) buffFirstEur += bf * e.count;
     itemCount += e.count;
 
     items.push({
@@ -345,21 +349,24 @@ export async function getInventoryValue(steamId: string): Promise<InventoryResul
     });
   }
 
-  items.sort((a, b) => (b.totalEur ?? -1) - (a.totalEur ?? -1));
+  items.sort((a, b) => (b.totalEur ?? b.buffTotalEur ?? -1) - (a.totalEur ?? a.buffTotalEur ?? -1));
 
   return {
     steamId,
     profile,
     items,
     totalEur,
+    steamFirstEur,
+    buffFirstEur,
     pricedCount,
+    steamPricedCount,
     unpricedCount,
     itemCount,
     storageUnits: storageUnits.sort((a, b) => b.storedCount - a.storedCount),
     storedItemCount,
-    updated: db.updated,
+    updated: prices.updated,
     buffTotalEur,
     buffPricedCount,
-    buffUpdated: buff.updated,
+    buffUpdated: prices.buffUpdated,
   };
 }

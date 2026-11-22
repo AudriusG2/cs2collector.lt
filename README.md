@@ -17,7 +17,7 @@ Lietuviškas CS2 skinų kainų ir inventoriaus vertės sekiklis.
 | Karkasas | Next.js 16 (App Router, React 19) |
 | Stilius | Tailwind CSS 4 |
 | Duomenys | JSON failai repozitorijoje (`data/`) — jokios duomenų bazės |
-| Kainų šaltinis | Steam Community Market (`/market/search/render`) |
+| Kainų šaltinis | Steam Community Market (`/market/search/render`) + Buff.market |
 | Inventorius | Steam Community viešieji galiniai taškai per Cloudflare Worker proxy |
 | Prisijungimas | Steam OpenID 2.0 + HMAC pasirašytas slapukas (be DB) |
 | Hostingas | Vercel (diegiama automatiškai iš `main`) |
@@ -38,6 +38,8 @@ Atsidaro http://localhost:3000
 node scripts/scrape-prices.mjs              # ~4000 populiariausių (numatyta)
 node scripts/scrape-prices.mjs --pages 100  # greitesnis bandymas
 node scripts/scrape-prices.mjs --all        # visas katalogas (~35 000, ~2,5 val.)
+node scripts/scrape-steam-all.mjs           # viso katalogo kainos dalimis → data/steam-all.json
+node scripts/scrape-buff.mjs                # Buff.market kainos dalimis → data/buff.json
 node scripts/build-item-map.mjs             # public/item-map.json saugyklų programai
 ```
 
@@ -84,7 +86,9 @@ Be `SESSION_SECRET` prisijungimas sąmoningai neveikia, o likusi svetainė veiki
 ## Struktūra
 
 ```
-scripts/scrape-prices.mjs     Steam Market kainų surinkėjas
+scripts/scrape-prices.mjs     Steam Market kainų surinkėjas (populiariausios, su paveikslėliais)
+scripts/scrape-steam-all.mjs  Viso Steam katalogo kainos (tęsia nuo vietos, kur baigė)
+scripts/scrape-buff.mjs       Buff.market kainos (tęsia nuo vietos, kur baigė)
 scripts/build-item-map.mjs    item-map.json generatorius
 data/                         kainų momentinės kopijos (versijuojamos git)
 proxy/                        Cloudflare Worker — Steam užklausų proxy

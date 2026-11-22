@@ -1,4 +1,4 @@
-import { loadBuff, loadPrices } from "@/lib/prices";
+import { loadPriceLookup, pick } from "@/lib/prices";
 
 const MAX_ITEMS = 5000;
 
@@ -7,6 +7,10 @@ type Line = { hash: string; count: number };
 /**
  * Ikainoja daiktu sarasa (naudojama saugyklu turinio importui).
  * Priima: { items: [{ hash, count }] } — hash yra Steam market_hash_name.
+ *
+ * Kiekvienam daiktui grazinama Steam ir Buff kaina atskirai, o sumos —
+ * ir „grynos" (tik vienas saltinis), ir su atsargine kaina (Steam → Buff,
+ * Buff → Steam), kad daiktai be vieno saltinio kainos nedingtu is sumos.
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { items?: unknown } | null;
@@ -21,36 +25,62 @@ export async function POST(request: Request) {
     merged.set(it.hash, (merged.get(it.hash) ?? 0) + count);
   }
 
-  const [db, buff] = await Promise.all([loadPrices(), loadBuff()]);
+  const prices = await loadPriceLookup();
   let totalEur = 0;
-  let pricedCount = 0;
-  let unpricedCount = 0;
   let buffTotalEur = 0;
+  let steamFirstEur = 0;
+  let buffFirstEur = 0;
+  let pricedCount = 0;
+  let steamPricedCount = 0;
+  let buffPricedCount = 0;
+  let unpricedCount = 0;
 
   const items = [...merged].map(([hash, count]) => {
-    const p = db.byHash.get(hash);
-    const unitEur = p ? p.eur : null;
-    const lineEur = unitEur != null ? unitEur * count : null;
-    const b = buff.byHash.get(hash);
-    const buffUnitEur = b ? b.eur : null;
-    const buffLineEur = buffUnitEur != null ? buffUnitEur * count : null;
-    if (lineEur != null) totalEur += lineEur;
-    if (buffLineEur != null) buffTotalEur += buffLineEur;
-    if (lineEur != null || buffLineEur != null) pricedCount += count;
-    else unpricedCount += count;
+    const p = prices.item(hash);
+    const q = prices.quote(hash);
+    const lineEur = q.steam != null ? q.steam * count : null;
+    const buffLineEur = q.buff != null ? q.buff * count : null;
+    const sf = pick(q, "steam").eur;
+    const bf = pick(q, "buff").eur;
+    if (lineEur != null) {
+      totalEur += lineEur;
+      steamPricedCount += count;
+    }
+    if (buffLineEur != null) {
+      buffTotalEur += buffLineEur;
+      buffPricedCount += count;
+    }
+    if (sf != null) {
+      steamFirstEur += sf * count;
+      pricedCount += count;
+    } else unpricedCount += count;
+    if (bf != null) buffFirstEur += bf * count;
     return {
       hash,
       name: p?.n ?? hash,
       icon: p?.icon ?? null,
       color: p?.rarity.color ?? null,
       count,
-      unitEur,
+      unitEur: q.steam,
       totalEur: lineEur,
-      buffUnitEur,
+      buffUnitEur: q.buff,
       buffTotalEur: buffLineEur,
     };
   });
 
-  items.sort((a, b) => Math.max(b.buffTotalEur ?? -1, b.totalEur ?? -1) - Math.max(a.buffTotalEur ?? -1, a.totalEur ?? -1));
-  return Response.json({ items, totalEur, buffTotalEur, pricedCount, unpricedCount, updated: db.updated, buffUpdated: buff.updated });
+  const best = (i: (typeof items)[number]) => Math.max(i.buffTotalEur ?? -1, i.totalEur ?? -1);
+  items.sort((a, b) => best(b) - best(a));
+  return Response.json({
+    items,
+    totalEur,
+    buffTotalEur,
+    steamFirstEur,
+    buffFirstEur,
+    pricedCount,
+    steamPricedCount,
+    buffPricedCount,
+    unpricedCount,
+    updated: prices.updated,
+    buffUpdated: prices.buffUpdated,
+  });
 }

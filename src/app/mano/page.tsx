@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { InventoryBreakdown } from "@/components/InventoryBreakdown";
 import { ManoPanel } from "@/components/ManoPanel";
 import { Stat } from "@/components/Stat";
-import { formatNum, timeAgo } from "@/lib/format";
+import { fallbackHint, formatNum, timeAgo } from "@/lib/format";
 import { LOGIN_ERRORS } from "@/lib/openid";
 import { getSessionSteamId } from "@/lib/session";
 import { SteamError, getInventoryValue, getProfile } from "@/lib/steam";
@@ -117,26 +117,38 @@ export default async function ManoPage({ searchParams }: { searchParams: SP }) {
       ) : (
         result && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Steam vertė" value={<Money eur={result.totalEur} />} hint="inventorius, be saugyklų" />
+            <Stat
+              label="Steam vertė"
+              value={<Money eur={result.steamFirstEur} />}
+              hint={fallbackHint(result.pricedCount - result.steamPricedCount, "Buff")}
+            />
             <Stat
               label="Buff vertė"
-              value={<Money eur={result.buffTotalEur} />}
+              value={<Money eur={result.buffFirstEur} />}
               accent
-              hint={result.buffUpdated ? "inventorius, be saugyklų" : "Buff kainos dar renkamos"}
+              hint={
+                result.buffUpdated
+                  ? fallbackHint(result.pricedCount - result.buffPricedCount, "Steam")
+                  : "Buff kainos dar renkamos"
+              }
             />
-            <Stat label="Daiktų" value={formatNum(result.itemCount)} hint="inventoriuje" />
-            <Stat label="Įkainota" value={formatNum(result.pricedCount)} hint="rasta kainų bazėje" />
+            <Stat label="Daiktų" value={formatNum(result.itemCount)} hint="inventoriuje, be saugyklų" />
+            <Stat
+              label="Įkainota"
+              value={`${formatNum(result.pricedCount)} iš ${formatNum(result.itemCount)}`}
+              hint="turi Steam arba Buff kainą"
+            />
           </div>
         )
       )}
 
       <ManoPanel
         steamId={steamId}
-        inventoryEur={result?.totalEur ?? null}
-        inventoryBuffEur={result?.buffUpdated ? result.buffTotalEur : null}
+        inventoryEur={result?.steamFirstEur ?? null}
+        inventoryBuffEur={result?.buffUpdated ? result.buffFirstEur : null}
       />
 
-      {result && <InventoryBreakdown items={result.items} totalEur={result.totalEur} />}
+      {result && <InventoryBreakdown items={result.items} />}
     </div>
   );
 }

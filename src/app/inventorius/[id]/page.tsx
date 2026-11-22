@@ -3,7 +3,7 @@ import { InventoryBreakdown } from "@/components/InventoryBreakdown";
 import { Stat } from "@/components/Stat";
 import { StorageUnits } from "@/components/StorageUnits";
 import { SteamForm } from "@/components/SteamForm";
-import { formatNum, timeAgo } from "@/lib/format";
+import { fallbackHint, formatNum, timeAgo } from "@/lib/format";
 import { SteamError, getInventoryValue, resolveSteamId } from "@/lib/steam";
 import type { InventoryResult } from "@/lib/types";
 import { Money } from "@/components/Currency";
@@ -53,8 +53,6 @@ export default async function InventoryResultPage({ params }: { params: Params }
     );
   }
 
-  const total = result.totalEur;
-
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center gap-4">
@@ -81,12 +79,20 @@ export default async function InventoryResultPage({ params }: { params: Params }
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
-        <Stat label="Steam vertė" value={<Money eur={total} />} hint="Steam Market kainomis" />
+        <Stat
+          label="Steam vertė"
+          value={<Money eur={result.steamFirstEur} />}
+          hint={fallbackHint(result.pricedCount - result.steamPricedCount, "Buff", "Steam Market kainomis")}
+        />
         <Stat
           label="Buff vertė"
-          value={<Money eur={result.buffTotalEur} />}
+          value={<Money eur={result.buffFirstEur} />}
           accent
-          hint={result.buffUpdated ? "Buff.market kainomis" : "Buff kainos dar renkamos"}
+          hint={
+            result.buffUpdated
+              ? fallbackHint(result.pricedCount - result.buffPricedCount, "Steam", "Buff.market kainomis")
+              : "Buff kainos dar renkamos"
+          }
         />
         <Stat
           label="Daiktų"
@@ -97,12 +103,16 @@ export default async function InventoryResultPage({ params }: { params: Params }
               : "iš viso inventoriuje"
           }
         />
-        <Stat label="Įkainota" value={formatNum(result.pricedCount)} hint="rasta mūsų bazėje" />
+        <Stat
+          label="Įkainota"
+          value={`${formatNum(result.pricedCount)} iš ${formatNum(result.itemCount)}`}
+          hint="turi Steam arba Buff kainą"
+        />
       </div>
 
       <StorageUnits units={result.storageUnits} storedCount={result.storedItemCount} />
 
-      <InventoryBreakdown items={result.items} totalEur={total} />
+      <InventoryBreakdown items={result.items} />
 
       <section className="rounded-xl border border-ink-700 bg-ink-850/50 p-5">
         <h3 className="text-sm font-semibold text-white">Tikrinti kitą profilį</h3>

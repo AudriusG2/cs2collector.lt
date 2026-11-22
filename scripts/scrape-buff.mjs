@@ -15,9 +15,13 @@
  *   { updated, source, usdEur, count, items: { [market_hash_name]: [euroCentai, parduodamuKiekis, atnaujintaYYYYMMDD] } }
  *
  * Naudojimas:
- *   node scripts/scrape-buff.mjs                 # visas katalogas
+ *   node scripts/scrape-buff.mjs                 # tesiama nuo ten, kur baige ankstesnis paleidimas
  *   node scripts/scrape-buff.mjs --pages 5       # greitas bandymas
  *   node scripts/scrape-buff.mjs --start 200     # tesiama nuo 200 puslapio
+ *
+ * Svarbu: per viena paleidima (~5 val.) Buff leidzia apeiti tik ~150 is ~430
+ * puslapiu. Todel faile saugomas `nextPage` ir kitas paleidimas tesia nuo jo —
+ * anksciau kas kart buvo pradedama nuo 1 psl. ir galas niekada nepasiekiamas.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -43,7 +47,9 @@ const argNum = (name, fallback) => {
   return i !== -1 ? Number(args[i + 1]) : fallback;
 };
 const maxPages = argNum("--pages", Infinity);
-const startPage = argNum("--start", 1);
+const startArg = argNum("--start", null);
+// Laiko biudzetas minutemis: baigiam patys ir issaugom tikslu `nextPage`, kol darbo nenutrauke CI
+const deadline = Date.now() + argNum("--minutes", Infinity) * 60_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const today = () => Number(new Date().toISOString().slice(0, 10).replaceAll("-", ""));
@@ -71,9 +77,12 @@ async function usdToEur() {
 async function loadExisting() {
   try {
     const j = JSON.parse(await readFile(OUT, "utf8"));
-    return j?.items && typeof j.items === "object" ? j.items : {};
+    return {
+      items: j?.items && typeof j.items === "object" ? j.items : {},
+      nextPage: Number(j?.nextPage) || 1,
+    };
   } catch {
-    return {};
+    return { items: {}, nextPage: 1 };
   }
 }
 
@@ -103,29 +112,44 @@ async function fetchWithRetry(page) {
   throw new Error("nepasiekiama");
 }
 
-async function save(items, usdEur) {
+async function save(items, usdEur, nextPage) {
   await mkdir(path.dirname(OUT), { recursive: true });
   const count = Object.keys(items).length;
   await writeFile(
     OUT,
-    JSON.stringify({ updated: new Date().toISOString(), source: "buff.market", usdEur, count, items }),
+    JSON.stringify({ updated: new Date().toISOString(), source: "buff.market", usdEur, nextPage, count, items }),
   );
   return count;
 }
 
 async function main() {
   const usdEur = await usdToEur();
-  const items = await loadExisting();
+  const existing = await loadExisting();
+  const items = existing.items;
   const before = Object.keys(items).length;
-  console.log(`USD→EUR: ${usdEur} · esamų Buff kainų: ${before}`);
+  const startPage = startArg ?? existing.nextPage;
+  console.log(`USD→EUR: ${usdEur} · esamų Buff kainų: ${before} · pradedam nuo ${startPage} psl.`);
 
   const skipped = [];
   let fresh = 0;
   let page = startPage;
-  let totalPages = startPage;
+  let totalPages = Infinity; // suzinosim is pirmo atsakymo
   let fetched = 0;
+  let wrapped = false;
+  // Kitas paleidimas tesia nuo cia (issaugoma kartu su dalinemis kopijomis)
+  const cursor = () => (page > totalPages ? 1 : page);
 
-  while (page <= totalPages && fetched < maxPages) {
+  while (fetched < maxPages) {
+    if (Date.now() > deadline) {
+      console.log("Baigėsi laiko biudžetas — sustojam.");
+      break;
+    }
+    if (page > totalPages) {
+      if (wrapped || startPage === 1) break; // apejom visa kataloga
+      page = 1; // galas pasiektas — tesiam nuo pradziu iki startPage
+      wrapped = true;
+    }
+    if (wrapped && page >= startPage) break;
     let data;
     try {
       data = await fetchWithRetry(page);
@@ -138,7 +162,7 @@ async function main() {
       continue;
     }
 
-    totalPages = data.total_page ?? page;
+    totalPages = data.total_page ?? totalPages;
     const stamp = today();
     for (const it of data.items ?? []) {
       const usd = Number(it.sell_min_price);
@@ -148,22 +172,22 @@ async function main() {
     }
 
     fetched += 1;
-    if (page % 25 === 0 || page === totalPages) {
-      const count = await save(items, usdEur); // dalinis issaugojimas
-      console.log(`  psl. ${page}/${totalPages} — ${count} kainų bazėje (${fresh} atnaujinta šiame paleidime)`);
-    }
     page += 1;
-    if (page <= totalPages && fetched < maxPages) await sleep(DELAY_MS);
+    if (page % 25 === 1 || page > totalPages) {
+      const count = await save(items, usdEur, cursor()); // dalinis issaugojimas
+      console.log(`  psl. ${page - 1}/${totalPages} — ${count} kainų bazėje (${fresh} atnaujinta šiame paleidime)`);
+    }
+    if (fetched < maxPages) await sleep(DELAY_MS);
   }
 
   if (fresh === 0 && before === 0) throw new Error("Negauta nė vienos kainos — failas nesukurtas");
 
-  const count = await save(items, usdEur);
+  const count = await save(items, usdEur, cursor());
   console.log(`\nOK — ${count} Buff kainų bazėje (${fresh} atnaujinta, anksčiau buvo ${before}) → ${OUT}`);
   if (skipped.length) {
     console.log(`Praleisti puslapiai (${skipped.length}): ${skipped.slice(0, 30).join(", ")}${skipped.length > 30 ? "…" : ""}`);
-    console.log(`Tęsti vėliau galima: node scripts/scrape-buff.mjs --start ${skipped[0]}`);
   }
+  console.log(`Kitas paleidimas tęs nuo ${cursor()} psl.`);
 }
 
 main().catch((e) => {

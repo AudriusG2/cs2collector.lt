@@ -51,12 +51,14 @@ export function categorise(type: string, hash: string): Category {
   const h = (hash || "").toLowerCase();
   if (t.includes("knife") || t.includes("bayonet") || h.includes("★") && t.includes("knife")) return "peilis";
   if (t.includes("glove") || t.includes("wraps")) return "pirstines";
-  if (t.includes("container") || h.includes("case") || t.includes("capsule")) return "deze";
-  if (t.includes("sticker")) return "lipdukas";
+  if (t.includes("music kit") || h.includes("music kit |")) return "muzika";
+  if (t.includes("patch") || h.startsWith("patch |")) return "lopas";
+  if (t.includes("sticker") || h.startsWith("sticker |")) return "lipdukas";
+  if (t.includes("charm") || h.startsWith("charm |") || h.startsWith("sticker slab |")) return "talismanas";
+  if (t.includes("graffiti") || h.startsWith("sealed graffiti |")) return "grafitis";
+  if (t.includes("container") || h.endsWith(" case") || t.includes("capsule")) return "deze";
   if (t.includes("agent")) return "agentas";
   if (t.includes("key")) return "raktas";
-  if (t.includes("graffiti")) return "grafitis";
-  if (t.includes("charm")) return "talismanas";
   if (
     t.includes("rifle") ||
     t.includes("pistol") ||
@@ -80,6 +82,8 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   raktas: "Raktai",
   grafitis: "Grafiti",
   talismanas: "Talismanai",
+  muzika: "Muzikos rinkiniai",
+  lopas: "Lopai",
   kita: "Kita",
 };
 

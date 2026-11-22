@@ -22,3 +22,8 @@ export function timeAgo(iso: string): string {
   const d = Math.floor(h / 24);
   return `prieš ${d} d.`;
 }
+
+/** Paaiskinimas vertes plytelei, kai dalies daiktu kaina paimta is kito saltinio */
+export function fallbackHint(n: number, other: "Steam" | "Buff", base = "inventorius, be saugyklų"): string {
+  return n > 0 ? `${base}; ${formatNum(n)} be kainos — imta ${other}` : base;
+}

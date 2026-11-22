@@ -32,6 +32,8 @@ export type Category =
   | "raktas"
   | "grafitis"
   | "talismanas"
+  | "muzika"
+  | "lopas"
   | "kita";
 
 export type Item = RawItem & {
@@ -75,8 +77,17 @@ export type InventoryResult = {
   steamId: string;
   profile: { name: string | null; avatar: string | null } | null;
   items: InventoryItem[];
+  /** Tik Steam kainomis (be atsarginiu) */
   totalEur: number;
+  /** Steam kainomis, o kur Steam kainos nera — Buff */
+  steamFirstEur: number;
+  /** Buff kainomis, o kur Buff kainos nera — Steam */
+  buffFirstEur: number;
+  /** Daiktu su bent viena kaina (Steam arba Buff) */
   pricedCount: number;
+  /** Daiktu su Steam kaina */
+  steamPricedCount: number;
+  /** Daiktu be jokios kainos */
   unpricedCount: number;
   itemCount: number;
   /** Saugyklos ir jose paslepti daiktai — i verte neiskaiciuojami */
@@ -87,4 +98,16 @@ export type InventoryResult = {
   buffTotalEur: number;
   buffPricedCount: number;
   buffUpdated: string | null;
+};
+
+/** Daiktu skaicius ir verte su atsarginemis kainomis (Steam↔Buff) */
+export type ValueSummary = {
+  steamEur: number;
+  buffEur: number;
+  steamFirstEur: number;
+  buffFirstEur: number;
+  pricedCount: number;
+  steamPricedCount: number;
+  buffPricedCount: number;
+  unpricedCount: number;
 };
