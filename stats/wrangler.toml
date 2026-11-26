@@ -1,0 +1,10 @@
+name = "cs2collector-stats"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+
+# D1 duomenų bazė sukuriama: npx wrangler d1 create cs2collector-stats
+# ir lentelės: npx wrangler d1 execute cs2collector-stats --remote --file schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "cs2collector-stats"
+database_id = "00000000-0000-0000-0000-000000000000"

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CurrencyProvider, CurrencySelect } from "@/components/Currency";
+import { VisitorStats } from "@/components/VisitorStats";
 import { loadRates } from "@/lib/rates";
 import { OG_IMAGE, SITE, SITE_NAME, SITE_OG_DESCRIPTION, SITE_TITLE } from "@/lib/seo";
 import "./globals.css";
@@ -81,6 +82,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <p>
               © {new Date().getFullYear()} cs2collector.lt — kainos iš Steam Community Market.
             </p>
+            <VisitorStats />
             <p className="text-xs">
               Nesusiję su Valve Corporation. Counter-Strike ir CS2 yra Valve prekių ženklai.
             </p>

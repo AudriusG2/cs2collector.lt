@@ -5,6 +5,9 @@ const STORAGE_ORIGIN = new URL(
   process.env.NEXT_PUBLIC_STORAGE_URL || "https://cs2collector-storage.fly.dev",
 ).origin;
 
+// Lankytoju skaitiklis (VisitorStats.tsx, stats/ Worker)
+const STATS_ORIGIN = process.env.NEXT_PUBLIC_STATS_URL ? new URL(process.env.NEXT_PUBLIC_STATS_URL).origin : "";
+
 // 'unsafe-inline' butinas: statiniai (ISR) puslapiai negali tureti nonce, o Next i juos
 // iraso inline <script>. 'unsafe-eval' reikia tik React dev rezimui.
 const CSP = [
@@ -13,7 +16,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   // Prekiu paveiksleliai ir avatarai — Steam CDN; data: — Steam QR kodas is saugyklu serverio.
   "img-src 'self' data: https://*.steamstatic.com",
-  `connect-src 'self' ${STORAGE_ORIGIN}`,
+  `connect-src 'self' ${STORAGE_ORIGIN}${STATS_ORIGIN ? ` ${STATS_ORIGIN}` : ""}`,
   "font-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
