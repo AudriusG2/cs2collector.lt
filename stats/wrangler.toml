@@ -7,4 +7,4 @@ compatibility_date = "2025-09-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "cs2collector-stats"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "76ccea96-9b5d-475e-a988-5e28892ffee9"

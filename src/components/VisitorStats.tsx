@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { formatNum } from "@/lib/format";
 
 // Lankytoju skaitiklio adresas (Cloudflare Worker, stats/ katalogas). Viesas, ne slaptas.
-export const STATS_URL = process.env.NEXT_PUBLIC_STATS_URL?.replace(/\/$/, "") || "";
+export const STATS_URL =
+  process.env.NEXT_PUBLIC_STATS_URL?.replace(/\/$/, "") || "https://cs2collector-stats.girgzdysaudrius.workers.dev";
 
 type Stats = { today: number; record: { day: string; count: number } | null; total: number };
 
