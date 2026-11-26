@@ -5,7 +5,10 @@
  *   data/history/YYYY-MM-DD.json - tik { hash: kaina } momentine kopija
  *
  * Naudojimas:
- *   node scripts/scrape-prices.mjs            # ~4000 populiariausiu
+ * Nuo 2026-11-26 naudojama nauja Steam paieskos API (zr. steam-search.mjs):
+ * 100 prekiu per puslapi, todel 400 puslapiu apima visa sugrupuota kataloga (~14k).
+ *
+ *   node scripts/scrape-prices.mjs            # iki 400 puslapiu (visas katalogas)
  *   node scripts/scrape-prices.mjs --all      # visas katalogas (~35k, ~2.5 val.)
  *   node scripts/scrape-prices.mjs --pages 50
  *   node scripts/scrape-prices.mjs --with-all   # + viso katalogo dalis (scrape-steam-all.mjs)
@@ -20,8 +23,7 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const DATA = path.join(ROOT, "data");
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
-const PAGE_SIZE = 10; // Steam apriboja rezultatu kieki viename atsakyme
+import { searchPage, SORT, PAGE_SIZE } from "./steam-search.mjs";
 const DELAY_MS = Number(process.env.SCRAPE_DELAY ?? 2600);
 
 const args = process.argv.slice(2);
@@ -34,19 +36,8 @@ const STARTED = Date.now();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function fetchPage(start, attempt = 1) {
-  const url =
-    `https://steamcommunity.com/market/search/render/?appid=730&norender=1` +
-    `&count=${PAGE_SIZE}&start=${start}&currency=3&sort_column=popular&sort_dir=desc`;
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (res.status === 429 || res.status === 502) throw new Error(`HTTP ${res.status}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    if (!json?.success) throw new Error("success=false");
-    return json;
+    return await searchPage({ start, count: PAGE_SIZE, order: SORT.popular });
   } catch (err) {
     if (attempt >= 5) throw err;
     const backoff = DELAY_MS * 2 ** attempt;

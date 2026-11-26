@@ -27,8 +27,7 @@ import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const OUT = path.join(ROOT, "data", "steam-all.json");
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36";
-const PAGE_SIZE = 10;
+import { searchPage, SORT, PAGE_SIZE } from "./steam-search.mjs";
 const DELAY_MS = Number(process.env.SCRAPE_DELAY ?? 3000);
 const MAX_AGE_DAYS = 30; // senesnes kainos ismetamos
 const SAVE_EVERY = 50;
@@ -47,18 +46,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stamp = (d = new Date()) => Number(d.toISOString().slice(0, 10).replaceAll("-", ""));
 
 async function fetchPage(start, attempt = 1) {
-  const url =
-    `https://steamcommunity.com/market/search/render/?appid=730&norender=1` +
-    `&count=${PAGE_SIZE}&start=${start}&currency=3&sort_column=name&sort_dir=asc`;
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    if (!json?.success) throw new Error("success=false");
-    return json;
+    return await searchPage({ start, count: PAGE_SIZE, order: SORT.nameAsc });
   } catch (err) {
     if (attempt >= 5) throw err;
     const backoff = DELAY_MS * 2 ** attempt;
@@ -136,6 +125,11 @@ async function main() {
     page += 1;
     start += PAGE_SIZE;
     if (start >= total) start = 0; // apejom visa kataloga — is pradziu
+    // Su 100 prekiu puslapiais visas katalogas apeinamas per viena paleidima — antro karto nereikia
+    if (page * PAGE_SIZE >= total) {
+      console.log("Visas katalogas apeitas — sustojam.");
+      break;
+    }
 
     if (page % SAVE_EVERY === 0) {
       const count = await save(items, start, total);

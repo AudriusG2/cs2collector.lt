@@ -17,7 +17,7 @@ Lietuviškas CS2 skinų kainų ir inventoriaus vertės sekiklis.
 | Karkasas | Next.js 16 (App Router, React 19) |
 | Stilius | Tailwind CSS 4 |
 | Duomenys | JSON failai repozitorijoje (`data/`) — jokios duomenų bazės |
-| Kainų šaltinis | Steam Community Market (`/market/search/render`) + Buff.market |
+| Kainų šaltinis | Steam Community Market (`/market/actions?q=Search`, žr. `scripts/steam-search.mjs`) + Buff.market |
 | Inventorius | Steam Community viešieji galiniai taškai per Cloudflare Worker proxy |
 | Prisijungimas | Steam OpenID 2.0 + HMAC pasirašytas slapukas (be DB) |
 | Hostingas | Vercel (diegiama automatiškai iš `main`) |
