@@ -13,35 +13,38 @@
  *   node scripts/scrape-prices.mjs --pages 50
  *   node scripts/scrape-prices.mjs --with-all   # + viso katalogo dalis (scrape-steam-all.mjs)
  *
- * GitHub Action'e (GITHUB_ACTIONS) viso katalogo dalis renkama automatiskai —
- * tiek, kiek leidzia darbo laiko limitas (ALL_BUDGET_MIN, numatyta 80 min. viso darbo).
+ * GitHub Action'e (GITHUB_ACTIONS) surinktos kainos dar sujungiamos i data/steam-all.json
+ * (atskiro viso katalogo rinkimo nebereikia). Jei Steam nutraukia rinkima (HTTP 429),
+ * issaugoma tai, kas surinkta, o kitoms prekems paliekamos ankstesnes kainos.
  */
 import { writeFile, readFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const DATA = path.join(ROOT, "data");
 import { searchPage, SORT, PAGE_SIZE } from "./steam-search.mjs";
-const DELAY_MS = Number(process.env.SCRAPE_DELAY ?? 2600);
+// Nauja Steam API riboja ~100 uzklausu per kelias minutes — ne greiciau kaip kas 4,5 s
+const DELAY_MS = Math.max(4500, Number(process.env.SCRAPE_DELAY ?? 4500));
 
 const args = process.argv.slice(2);
 const wantAll = args.includes("--all");
 const pagesArg = args.indexOf("--pages");
 const maxPages = wantAll ? Infinity : pagesArg !== -1 ? Number(args[pagesArg + 1]) : 400;
 const withAll = args.includes("--with-all") || process.env.GITHUB_ACTIONS === "true";
-const STARTED = Date.now();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const MAX_TRIES = 7;
 
 async function fetchPage(start, attempt = 1) {
   try {
     return await searchPage({ start, count: PAGE_SIZE, order: SORT.popular });
   } catch (err) {
-    if (attempt >= 5) throw err;
-    const backoff = DELAY_MS * 2 ** attempt;
-    console.warn(`  ! ${err.message} — kartoju po ${Math.round(backoff / 1000)}s (${attempt}/5)`);
+    if (attempt >= MAX_TRIES) throw err;
+    // 429 = Steam laikinai riboja (~100 uzklausu per kelias min.) — laukiam minutemis
+    const backoff = err.message.includes("429") ? 60_000 * attempt : DELAY_MS * 2 ** attempt;
+    console.warn(`  ! ${err.message} — kartoju po ${Math.round(backoff / 1000)}s (${attempt}/${MAX_TRIES})`);
     await sleep(backoff);
     return fetchPage(start, attempt + 1);
   }
@@ -71,7 +74,15 @@ async function main() {
   let page = 0;
 
   while (start < total && page < maxPages) {
-    const json = await fetchPage(start);
+    let json;
+    try {
+      json = await fetchPage(start);
+    } catch (err) {
+      if (items.size === 0) throw err;
+      // Dalis jau surinkta — issaugom ja, likusios prekes pasiliks vakar dienos kainas
+      console.warn(`Steam nebeatsako (${err.message}) — saugom ${items.size} surinktų kainų.`);
+      break;
+    }
     total = json.total_count ?? 0;
     for (const r of json.results ?? []) {
       const it = normalise(r);
@@ -83,6 +94,10 @@ async function main() {
     console.log(`  ${String(pct).padStart(3)}% — ${items.size} prekiu (is ${total})`);
     if (start < total && page < maxPages) await sleep(DELAY_MS);
   }
+
+  const freshList = [...items.values()];
+  const fresh = freshList.length;
+  if (start < total) await keepOldPrices(items);
 
   const list = [...items.values()].sort((a, b) => b.l - a.l);
   const today = new Date().toISOString().slice(0, 10);
@@ -102,30 +117,49 @@ async function main() {
   idx.sort();
   await writeFile(idxPath, JSON.stringify(idx));
 
-  console.log(`\nOK — ${list.length} prekiu issaugota (${today}). Katalogo dydis: ${total}.`);
+  console.log(`\nOK — ${list.length} prekiu issaugota, ${fresh} atnaujinta (${today}). Katalogo dydis: ${total}.`);
 
-  if (withAll && !wantAll) runCatalogPart();
+  if (withAll && !wantAll) await mergeIntoSteamAll(freshList, today);
+}
+
+/** Jei Steam nutrauke rinkima pusiaukeleje — neatnaujintoms prekems paliekam ankstesnes kainas. */
+async function keepOldPrices(items) {
+  try {
+    const old = JSON.parse(await readFile(path.join(DATA, "prices.json"), "utf8"));
+    let kept = 0;
+    for (const it of old.items ?? []) if (it.h && !items.has(it.h)) (items.set(it.h, it), kept++);
+    console.log(`Palikta ${kept} ankstesnių kainų.`);
+  } catch {}
 }
 
 /**
- * Likusio katalogo dalis (pigus ir reti daiktai) — atskiru procesu, kad jo klaida
- * nesugadintu jau issaugotu populiariuju kainu. Laikas skaiciuojamas taip, kad
- * visas darbas tilptu i Action limita (90 min.) ir dar liktu laiko commit'ui.
+ * Nauja Steam API per viena paleidima apeina visa (sugrupuota) kataloga, todel
+ * atskiro scrape-steam-all.mjs rinkimo nebereikia — tas pacias kainas tiesiog
+ * sujungiam i data/steam-all.json (formatas: [euroCentai, kiekis, YYYYMMDD]).
+ * Kitu nusidevejimo versiju senos kainos islieka iki 30 dienu.
  */
-function runCatalogPart() {
-  const budget = Number(process.env.ALL_BUDGET_MIN ?? 80);
-  const left = Math.floor(budget - (Date.now() - STARTED) / 60_000);
-  if (left < 1) {
-    console.log("Viso katalogo daliai laiko neliko — praleidžiam.");
-    return;
+async function mergeIntoSteamAll(list, today) {
+  const file = path.join(DATA, "steam-all.json");
+  let all = { items: {} };
+  try {
+    all = JSON.parse(await readFile(file, "utf8"));
+  } catch {}
+  const items = all.items ?? {};
+  const stampToday = Number(today.replaceAll("-", ""));
+  const minStamp = Number(new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10).replaceAll("-", ""));
+  let updated = 0;
+  for (const it of list) {
+    if (!it.h || !(it.p > 0)) continue;
+    items[it.h] = [it.p, it.l, stampToday];
+    updated += 1;
   }
-  console.log(`\nRenkama viso katalogo dalis (${left} min.)…`);
-  const r = spawnSync(
-    process.execPath,
-    [path.join(ROOT, "scripts", "scrape-steam-all.mjs"), "--pages", "3600", "--minutes", String(left)],
-    { stdio: "inherit", env: process.env },
+  for (const [h, v] of Object.entries(items)) if (!(v?.[2] >= minStamp)) delete items[h];
+  const count = Object.keys(items).length;
+  await writeFile(
+    file,
+    JSON.stringify({ ...all, updated: new Date().toISOString(), currency: "EUR", count, items }),
   );
-  if (r.status !== 0) console.warn("Viso katalogo dalis nepavyko — tęsim kitą kartą.");
+  console.log(`steam-all.json: ${count} kainų (${updated} atnaujinta).`);
 }
 
 main().catch((e) => {
